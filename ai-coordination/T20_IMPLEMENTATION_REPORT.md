@@ -171,4 +171,4 @@ Full detail is in plan §9, `ARCHITECTURE.md` §4.1, `API_CONTRACTS.md` §2–§
 
 ## 10. Commits
 
-- Implementation commit: recorded in the follow-up commit on this branch.
+- Implementation commit: `b04fec4` on `task/T-20-terms-sections`. This follow-up records the hash. Not merged, not pushed.
