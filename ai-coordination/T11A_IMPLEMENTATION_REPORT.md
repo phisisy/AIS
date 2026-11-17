@@ -1,8 +1,8 @@
 # T-11a implementation report — Academic Records (Team 3)
 
-- **Branch:** `task/T-11a-academic-records` (from `main` `d15490a`). Not merged, not pushed.
+- **Branch:** `task/T-11a-academic-records` (from `main` `d15490a`).
 - **Implementation commit:** `0b91668`.
-- **Status:** READY_FOR_REVIEW, awaiting independent review and owner merge approval.
+- **Status:** VERIFIED. **Merged into `main` as `d062a5e`** (owner approval, 2026-11-17). Not pushed.
 - **Spec:** `PROPOSAL_T11_ACADEMIC_RECORDS.md` (D5 split: T-11a only), with owner decisions of 2026-11-17.
 
 ## 1. Approved scope (owner, 2026-11-17)
@@ -151,4 +151,21 @@ interface StudentDirectory {
 
 ## 12. Commit
 
-- Implementation commit: `0b91668` on `task/T-11a-academic-records`. Not merged, not pushed.
+- Implementation commit: `0b91668` on `task/T-11a-academic-records`; docs commit `6ae3ac3`.
+- Merge commit: `d062a5e` on `main` (local only, not pushed).
+
+## 13. Independent review and merge (2026-11-17)
+
+- **Reviewer:** AGY (independent, read-only). Inspected `0b91668` and `6ae3ac3`.
+- **Recommendation:** **APPROVE**.
+- **Findings:**
+  - Critical, High and Medium: none.
+  - **L-01:** performance of the file-based store as history grows. This is the known limitation in §10, accepted under D4, and resolved in production by MySQL (T-40). No change needed.
+  - **I-01:** the guard runs before any parameter validation, so anonymous requests get 401 first.
+  - **I-02:** errors from summary sources degrade to `{available:false}`.
+- **Clarifications agreed with the reviewer:**
+  - The reviewer's lint count (68) covered app/config/routes/public/tests; the full tracked set is 88. Both had 0 failures.
+  - The production database is MySQL (T-40).
+  - The merge unblocks T-22 (together with T-21). T-20 was already unblocked by T-02.
+- **Merge:** owner-approved `--no-ff` merge into `main` as `d062a5e`. Not pushed.
+- **Post-merge on `main`:** `php tests/run.php` 124 passed, 0 failed; `tests/Core/apache_check.php` PASS for both document roots.
