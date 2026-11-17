@@ -92,7 +92,8 @@ interface FacultyStudentVisibility {
 }
 ```
 - **T-10 ships `DenyAllFacultyVisibility`, which always returns `[]`.** No class assignments are invented, so faculty receive 404 for every student.
-- If a future implementation throws, Team 3 treats it as not visible (404) and logs only the exception class.
+- If a future implementation throws, Team 3 treats it as not visible (404) and logs only the exception class. A malformed answer is discarded entirely, and only sections with `enrollment_status === "approved"` count.
+- The source is queried for every faculty request, including ids that don't exist, so response timing can't reveal which records exist.
 - The real implementation is wired in T-31, using Team 5's teaching assignments and Team 4's approved enrollments.
 
 ## 9. Errors
@@ -100,7 +101,7 @@ interface FacultyStudentVisibility {
 |---|---|
 | 401 / 403 | Guard (T-02): not signed in / role not in the allowlist / CSRF |
 | 404 | Missing **or** not visible to the caller (identical body) |
-| 409 | `student_number` taken, account already has a profile |
+| 409 | `student_number` taken; account already has a profile; on PATCH, a concurrent change left `year_level` above the program's maximum (re-checked inside the write lock; reload and retry) |
 | 422 | Validation (field-keyed `errors`), unknown fields, account missing/inactive/not a student, unknown program |
 | 500 | Storage unreadable or corrupt, invalid configured pattern (generic body only) |
 
