@@ -250,7 +250,8 @@ T-02 guard; writes need `X-CSRF-Token`.
 | PATCH | `/api/students/{id}` | registrar, admin | Name, program, year level, academic status, admission year. Student number and account link can't be changed |
 
 - `academic_status`: `active`, `inactive`, `graduated`, `transferred`, `on_leave`. Separate from the account's active/inactive status.
-- Student numbers are uppercased and validated against `STUDENT_NUMBER_PATTERN` (see `.env.example`), and are always 1–32 characters of `A-Z 0-9 - /`.
+- Student numbers are uppercased and validated against `STUDENT_NUMBER_PATTERN` (see `.env.example`), and are always 1–32 characters of `A-Z 0-9 - /`. The default `[A-Z0-9][A-Z0-9-]{2,19}` is a **generic development placeholder, not the school's numbering policy**. Set the real format when the institution supplies it; no code change is needed.
+- Profiles are kept when the linked account is deactivated or loses `student`. The account can then no longer read its own profile (401 or 404), but registrar and admin still can, and academic status is never changed automatically.
 - `year_level` must fit the program's `max_year_level`. Programs come from a temporary Team 3 catalog (`students/programs.json`); Team 6 owns the final schema.
 
 **Faculty (B-07):** faculty get only `{id, student_number, full_name, program_code,

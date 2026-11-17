@@ -82,7 +82,9 @@ final class StudentService
         if ($student !== null && $this->authorization->hasAnyRole($actor, self::STAFF)) {
             return $student->toArray();
         }
-        if ($student !== null && $student->userId() === $actor->id) {
+        // Own-record access is a student privilege (owner decision 3): an account that lost the
+        // student role keeps its profile in storage but can no longer read it through this API.
+        if ($student !== null && $student->userId() === $actor->id && $this->authorization->hasAnyRole($actor, ['student'])) {
             return $student->toArray();
         }
         if ($this->authorization->hasAnyRole($actor, ['faculty'])) {

@@ -94,3 +94,43 @@ test('Students HTTP: a broken or corrupt student store fails safely with a gener
         $server->close();
     }
 });
+
+test('Students HTTP: profiles are retained when the account is deactivated or loses the student role (owner decision 3)', function (): void {
+    $server = studentServer();
+    try {
+        $token = asUser($server, 'registrar@example.test');
+        same(201, $server->request('POST', '/api/students', anaInput(['academic_status' => 'on_leave']), $token)['status']);
+        $profile = static fn (AuthHttpServer $s): array => $s->request('GET', '/api/students/1')['json']['data']['student'];
+        $before = $profile($server);
+        $users = new App\Auth\Repositories\MockUserRepository(new App\Core\JsonStore($server->directory . '/auth/users.json'));
+
+        // Ana loses the student role (now faculty only) while signed in.
+        asUser($server, 'ana@example.test');
+        $anaCookie = $server->cookie();
+        same(200, $server->request('GET', '/api/students/me')['status']);
+        $users->transaction(static fn ($tx) => $tx->update(4, ['roles' => ['faculty']]));
+        same(403, $server->request('GET', '/api/students/me')['status']);
+        same('{"success":false,"message":"Student not found.","errors":{}}', $server->request('GET', '/api/students/1')['body']);
+
+        // Then the account is deactivated: no authentication at all.
+        $users->transaction(static fn ($tx) => $tx->update(4, ['status' => 'inactive']));
+        $server->setCookie($anaCookie);
+        same(401, $server->request('GET', '/api/students/1')['status']);
+        same(401, (function () use ($server) { $server->setCookie(''); return $server->login('ana@example.test'); })()['status']);
+
+        // Registrar and admin still see the unchanged record: same number, same academic status and history.
+        foreach (['registrar@example.test', 'admin@example.test'] as $staff) {
+            asUser($server, $staff);
+            same($before, $profile($server));
+        }
+        same('on_leave', $before['academic_status']);
+        same('2026-00001', $before['student_number']);
+
+        // Restoring the role and account restores self-access to the same record.
+        $users->transaction(static fn ($tx) => $tx->update(4, ['status' => 'active', 'roles' => ['student']]));
+        asUser($server, 'ana@example.test');
+        same($before, $server->request('GET', '/api/students/me')['json']['data']['student']);
+    } finally {
+        $server->close();
+    }
+});
