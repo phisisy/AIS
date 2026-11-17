@@ -264,3 +264,34 @@ task/T-00-core
 .env.local
 storage/runtime/example.json
 ```
+
+## T-01 — Claude implementation (takeover, 2026-11-17)
+
+Codex reached its usage limit partway through T-01; the owner approved Claude as implementer. Branch `task/T-01-auth` from `main` at `ff581d3`.
+
+### Inherited work (preserved)
+- From Codex (uncommitted at takeover): `app/Auth/Session.php`, `SessionInterface.php`, `Models/User.php`, `Repositories/UserRepositoryInterface.php`, `Repositories/MockUserRepository.php`, `Services/LoginRateLimiter.php`. Kept unchanged.
+- `tests/Auth/AuthHttpTest.php`, `AuthServiceTest.php` and `HttpSupport.php` appeared at 10:46 **during** Claude's implementation, written by another agent still running in the workspace. Work stopped until the owner confirmed that agent had stopped (11:00). These tests were adopted as the spec and kept unchanged, except one appended test. Claude's `AuthService` was adapted to them (`login($email, $password, $ip)`, `logout()` requires a signed-in user, store under `runtime/auth/`).
+
+### Added or changed by Claude
+| File | Change |
+|---|---|
+| `app/Auth/Services/AuthService.php` | New. Login with the same 401 for every failure plus dummy-hash verification; `currentUser`/`requireUser` reload the account and destroy stale sessions; `logout`; pinned bcrypt cost 10 via `hashPassword()` |
+| `app/Auth/Controllers/AuthController.php` | New. csrf / login (CSRF, then field allowlist) / me / logout (auth, then CSRF) |
+| `routes/auth.php` | 4 routes |
+| `app/bootstrap.php` | Auth wiring; `mysql` mode fails closed until T-40; client IP from `REMOTE_ADDR` only |
+| `config/app.php` | `APP_ENV` must be `development` or `testing`; `APP_HTTPS` flag |
+| `app/Core/JsonStore.php` | Bounded `rename()` retry (10 attempts, about 1.1 s) for Windows/OneDrive file holds; temp file must be in the store directory |
+| `database/seeders/dev_users.php` | New. 4 fictional accounts, random passwords printed once; refuses an existing store, non-mock mode and invalid `APP_ENV` |
+| `tests/Auth/SessionAndLimiterTest.php`, `tests/Auth/fixtures/session_clock.php` | New. Idle/absolute timeout, 30-per-IP limit and window reset, invalid IP |
+| `tests/Core/ConfigTest.php`, `tests/Core/StorageTest.php` | Appended `APP_ENV` test and 2 retry tests (a real second process holds the file) |
+| `tests/Auth/AuthServiceTest.php` | Appended hash-parity test |
+| `README.md`, `.env.example` | Auth endpoints, settings, seeder, OneDrive note |
+
+### Results (actual)
+- `php tests/run.php`: **46 passed, 0 failed** (30 T-00 + 16 T-01).
+- `php -l`: all PHP files clean (42 before the parity-test append; 0 failures after).
+- `php tests/Core/apache_check.php`: PASS for both document roots.
+- Retry mutation check: with retries disabled, the retry test fails; restored to 10 and it passes.
+- Live probe with seeded accounts (`php -S`): csrf, then login (Set-Cookie `HttpOnly; SameSite=Lax`, CSRF rotated), then me 200, logout without CSRF 403, logout 200, me 401, wrong password 401.
+- No database connection, schema or SQL. No secrets committed.
