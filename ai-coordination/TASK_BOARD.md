@@ -35,7 +35,7 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 - **Description:** Front controller, autoloader, container bootstrap, Request/Response/Router/HttpException, `.env` loader, PDO factory (not used yet), JSON file store with locking, plain-PHP test runner.
 - **Files allowed to change:** `app/autoload.php`, `app/bootstrap.php`, `app/Core/*.php`, `config/app.php`, `config/database.php`, `public/index.php`, `public/router.php`, `public/.htaccess`, `.htaccess`, `.env.example`, `.gitignore`, `routes/` (empty registration files), `tests/run.php`, `tests/Support.php`, `tests/Core/*`, `README.md`
 - **Dependencies:** none (B-01, B-02 resolved)
-- **Branch:** `task/T-00-core`, created from `main`. Commit there; do not merge.
+- **Branch:** `task/T-00-core`, created and checked out by Claude. Codex edits files only and does not run git write commands (see PROJECT_CONTEXT "Git workflow").
 - **Acceptance criteria:**
   1. `GET /` returns the JSON success envelope. Unknown path → 404, wrong method → 405 with `Allow`.
   2. Non-JSON body → 415, malformed JSON → 400, body over 64 KB → 413.

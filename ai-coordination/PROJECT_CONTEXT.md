@@ -60,6 +60,16 @@ Writing a file does not notify the other AI. The human relays "task X is ready" 
 3. Codex edits only the files listed for that task. Needing another file → stop and note it in `CODEX_REPORT.md`.
 4. When done, Codex appends a section to `ai-coordination/CODEX_REPORT.md` (task ID, files changed, commands run with real output, known gaps) and sets `READY_FOR_REVIEW`.
 5. Claude reviews only `READY_FOR_REVIEW` tasks: reads the report, inspects the diff, runs safe checks (syntax, offline tests), writes `ai-coordination/CLAUDE_REVIEW.md`, and sets `VERIFIED`, `CHANGES_REQUESTED`, or `BLOCKED`.
+
+### Git workflow (owner decision 2026-11-17)
+
+Codex's sandbox denies writes to `.git` by design, so **Codex never runs git write commands** (checkout, add, commit, stash, reset). Read-only git (`status`, `diff`, `log`) is fine.
+
+1. Before a task starts, Claude creates `task/T-xx-<name>` from `main` and checks it out. The task entry names the branch.
+2. Codex edits working-tree files only. Changes stay uncommitted.
+3. Claude reviews the uncommitted changes with `git status` + `git diff` (and `git diff --no-index` for new files).
+4. On `VERIFIED`, Claude commits the task's files on the task branch. Only the owner merges to `main`.
+5. On `CHANGES_REQUESTED`, the changes stay uncommitted for Codex to fix. Nobody discards them.
 6. Claude never edits application source while a task is `IN_PROGRESS`, and never overwrites uncommitted work.
 7. No destructive database operations. No changes to Team 6's shared schema without Team 6 + owner approval.
 

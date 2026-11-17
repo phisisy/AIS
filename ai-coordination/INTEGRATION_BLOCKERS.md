@@ -19,7 +19,7 @@ Status key: **OPEN** (needs owner decision) · **DEFERRED** (accepted gap) · **
 The review process needs real diffs ("inspect the actual changes", "don't overwrite uncommitted changes").
 Without Git, Claude can't see what Codex changed or recover from a bad edit.
 **Resolved (owner, 2026-11-17):** Git initialized on `main` with an initial commit of the docs and guide files.
-Codex works on one branch per task (`task/T-00-core`) and commits there. Claude reviews with `git diff main...task/T-xx`. Only the owner merges to `main`.
+Codex's sandbox denies `.git` writes, so Claude creates the task branches and commits verified work. Codex edits files only. Only the owner merges to `main`. See PROJECT_CONTEXT "Git workflow".
 
 ## B-02 — Application shape (Critical)
 **Resolved (owner, 2026-11-17):** one PHP application with Team 2–5 modules (see `ARCHITECTURE.md` §1).
