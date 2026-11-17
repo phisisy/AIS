@@ -1,7 +1,7 @@
 # T-11a implementation report — Academic Records (Team 3)
 
 - **Branch:** `task/T-11a-academic-records` (from `main` `d15490a`). Not merged, not pushed.
-- **Implementation commit:** recorded in the follow-up commit on this branch (see the "Commit" section).
+- **Implementation commit:** `0b91668`.
 - **Status:** READY_FOR_REVIEW, awaiting independent review and owner merge approval.
 - **Spec:** `PROPOSAL_T11_ACADEMIC_RECORDS.md` (D5 split: T-11a only), with owner decisions of 2026-11-17.
 
@@ -151,4 +151,4 @@ interface StudentDirectory {
 
 ## 12. Commit
 
-- Implementation commit: _filled in by the follow-up commit_.
+- Implementation commit: `0b91668` on `task/T-11a-academic-records`. Not merged, not pushed.

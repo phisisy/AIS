@@ -17,7 +17,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-04 | 2 | Security-event logging for refused admin-route access | T-03 ✔ | VERIFIED (merged `c280aa7`) |
 | T-05 | 2 | Read-only audit-log endpoint | T-03 ✔ | PROPOSED (planning approved; not to be built yet) |
 | T-10 | 3 | Student profiles | T-02 ✔, B-07 ✔ | VERIFIED (merged `07b4c83`; see `T10_IMPLEMENTATION_REPORT.md`) |
-| T-11a | 3 | Academic records + StudentDirectory | T-10 ✔ | READY_FOR_REVIEW (APPROVED by owner 2026-11-17; committed on `task/T-11a-academic-records`, not merged; see `T11A_IMPLEMENTATION_REPORT.md`) |
+| T-11a | 3 | Academic records + StudentDirectory | T-10 ✔ | READY_FOR_REVIEW (APPROVED by owner 2026-11-17; committed `0b91668` on `task/T-11a-academic-records`, not merged; see `T11A_IMPLEMENTATION_REPORT.md`) |
 | T-11b | 3 | Course catalog, curriculum, real enrollment/grade summaries | T-11a, D1, T-22, T-32 | PROPOSED (not approved) |
 | T-06 | 2 | Protected admin registry + owner-only recovery CLI | T-03 ✔ | PROPOSED (design conditionally approved; `PROPOSAL_ADMIN_PROTECTION_RECOVERY.md` v2; implementation not approved) |
 | T-20 | 4 | Terms & sections catalog | T-02 | PROPOSED |
