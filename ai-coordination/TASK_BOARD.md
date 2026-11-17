@@ -10,7 +10,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 
 | ID | Team | Title | Depends on | Status |
 |---|---|---|---|---|
-| T-00 | Shared | Core HTTP skeleton + test runner | — (B-01, B-02 resolved) | APPROVED |
+| T-00 | Shared | Core HTTP skeleton + test runner | — (B-01, B-02 resolved) | VERIFIED |
 | T-01 | 2 | Authentication & sessions | T-00, B-06 | PROPOSED |
 | T-02 | 2 | RBAC middleware & authorization service | T-01 | PROPOSED |
 | T-03 | 2 | User administration + audit logging | T-02 | PROPOSED |
@@ -44,7 +44,7 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
   5. `APP_REPOSITORY` other than `mock`/`mysql` → fail closed. `.env` is git-ignored.
   6. Runs under XAMPP Apache (`.htaccess`) and `php -S 127.0.0.1:8000 public/router.php`.
 - **Required tests:** router (match, 404, 405, param validation), request parsing (415/400/413), response envelope, error handler hides internals, JsonStore concurrent write safety, config fail-closed. `php -l` on all files.
-- **Status:** APPROVED (owner, 2026-11-17)
+- **Status:** VERIFIED (Claude, 2026-11-17; see CLAUDE_REVIEW.md. Apache check passes when run outside Codex's sandbox)
 
 ### T-01 — Authentication & sessions
 - **Team:** 2
@@ -58,6 +58,7 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
   4. `requireUser()` reloads the user every request and rejects inactive users or changed `auth_version`.
   5. Rate limit: 5 per IP+email and 30 per IP per 15 min → 429 + `Retry-After`.
   6. Responses never contain password hashes or session IDs.
+  7. (From T-00 review) `APP_ENV` is validated and unknown values fail closed. Session and JSON store files work when the workspace is on OneDrive: use a bounded `rename()` retry, or document `APP_RUNTIME_PATH` outside OneDrive in README/.env.example.
 - **Required tests:** login success/failure matrix, CSRF missing/invalid, session fixation (ID changes), timeouts, rate limit, deactivated user mid-session → 401, HTTP-level login→me→logout flow.
 - **Status:** PROPOSED
 

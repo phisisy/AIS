@@ -72,7 +72,7 @@ service graph acyclic. ⚠ (B-04)
 ## 5. Core conventions
 
 - **Responses:** `{"success":true,"message":"...","data":{...}}` or `{"success":false,"message":"...","errors":{...}}`. `Content-Type: application/json`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`.
-- **Status codes:** 200, 201 created, 400 malformed JSON, 401 not signed in, 403 forbidden / bad CSRF, 404, 405 (with `Allow`), 409 conflict (duplicate, capacity, schedule clash, state change not allowed), 413, 415, 422 validation (`errors` keyed by field), 429 (with `Retry-After`), 500 generic message only.
+- **Status codes:** 200, 201 created, 400 malformed JSON, 422 JSON body that is not an object (T-00 behavior), 401 not signed in, 403 forbidden / bad CSRF, 404, 405 (with `Allow`), 409 conflict (duplicate, capacity, schedule clash, state change not allowed), 413, 415, 422 validation (`errors` keyed by field), 429 (with `Retry-After`), 500 generic message only.
 - **Errors:** throw `HttpException(status, message, errors)`. The front controller catches everything else, logs the exception class only, and returns a generic 500. No stack traces, SQL, or input echoed.
 - **Router:** path params `{id}`, `{sectionId}` etc. as positive integers. Literal routes like `/api/students/me` are registered before `{id}` routes.
 - **Input:** JSON bodies only (`application/json`), 64 KB cap, unknown fields rejected with 422.

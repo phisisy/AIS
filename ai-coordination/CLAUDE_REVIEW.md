@@ -1,0 +1,49 @@
+# Claude Reviews
+
+## T-00 — Core HTTP skeleton + test runner — **VERIFIED** (2026-11-17)
+
+Branch `task/T-00-core`, based on `main` at `a04d194`. Reviewed the uncommitted working tree as handed over by Codex.
+
+### What I inspected
+- `CODEX_REPORT.md` T-00 section and the `TASK_BOARD.md` diff (status change only).
+- Every changed file (33 new, 2 modified). All are inside T-00's "Files allowed to change". `app/Core/ErrorHandler.php` falls under `app/Core/*.php` and `tests/Core/fixtures/*` under `tests/Core/*`. No file outside the list was touched.
+- Full source of `app/`, `config/`, `public/`, `routes/`, `.htaccess` files, `.env.example`, `.gitignore`, `tests/run.php`, `tests/Support.php`, `tests/Core/apache_check.php`.
+
+### Independent checks (run by Claude, not taken from the report)
+
+| Check | Result |
+|---|---|
+| `php tests/run.php` | **30 passed, 0 failed**, exit 0 |
+| `php -l` on all 28 new PHP files | **0 failures** |
+| Bare `php -S 127.0.0.1:8765 public/router.php` (no test-only ini settings) | `/` 200 + JSON + `no-store` + `nosniff`; `/nope` 404; POST `/` 405 + `Allow: GET`; text/plain 415; `{bad` 400; 70 KB body 413; form POST 415; `/.env.example`, `/app/bootstrap.php`, `/config/app.php`, `/public/index.php`, `/../.git/config` all 404 JSON |
+| `php tests/Core/apache_check.php` (private XAMPP httpd, loopback, run as the owner's account) | **PASS for both `public/` and repository document roots**, exit 0. No leftover runtime directory |
+| Secrets scan of `app/ config/ public/ routes/` | None. `.env.example` has placeholders only |
+| Ignored/leftover files | None |
+
+### Acceptance criteria
+
+| # | Criterion | Verdict |
+|---|---|---|
+| 1 | Root envelope, 404, 405 + Allow | Met (tests + manual probe + Apache) |
+| 2 | 415 / 400 / 413 | Met (tests + bare php -S + Apache) |
+| 3 | Generic 500, nothing leaked | Met (ErrorHandler logs a sanitized class name only and discards buffered output; tests cover it) |
+| 4 | Positive-integer params, literal routes win | Met |
+| 5 | Unknown `APP_REPOSITORY` fails closed, `.env` git-ignored | Met |
+| 6 | XAMPP Apache + `php -S` | Met. Codex's Apache failure (`DocumentRoot must be a directory`) came from its sandboxed identity. The same script passes when run as the owner. Not a code defect |
+
+### Findings (none block T-00)
+
+| Severity | Finding | Action |
+|---|---|---|
+| Medium | `JsonStore` replaces the file with `rename()`. The workspace is inside **OneDrive**, whose sync client (or antivirus) can briefly hold the file open on Windows. The write then fails with a 500. Data isn't lost, since the original file is kept. | Carried into T-01: set `APP_RUNTIME_PATH` to a folder outside OneDrive in local `.env`, or add a short bounded retry around `rename()`. |
+| Low | `public/router.php` sends every request to `index.php`, so `php -S` cannot serve static frontend files from `public/`. This is deliberate (it keeps the repo private when the docroot is the repo root). | Revisit when Team 1 integrates (B-10). |
+| Low | Duplicate-route detection compares the literal path string. `/a/{id}` and `/a/{x}` can both be registered, and the first one silently wins. | Optional hardening. Low risk while route files are reviewed. |
+| Info | Non-object JSON (e.g. `[1]`) returns **422**, not 400. This is reasonable, but undocumented. | Documented in `ARCHITECTURE.md` §5. |
+| Info | The error handler turns every PHP warning, notice and deprecation into a 500. This is strict on purpose. | Developers should expect deprecations to fail loudly in tests. |
+| Info | `APP_ENV` accepts any value. | T-01 must decide whether to refuse unknown or production values before sessions exist. |
+
+### Security notes
+PDO: exception mode, native prepares, utf8mb4, multi-statements off, and a credential-free error message. No connection is made at bootstrap. Response headers are validated against CR/LF injection, and the mandatory security headers can't be overridden. Request path rejects control characters and `#`, and is not URL-decoded before routing. Request body is capped at 64 KiB, including chunked bodies. Test cleanup refuses to delete directories it didn't create.
+
+### Outcome
+**VERIFIED.** Committed on `task/T-00-core` by Claude per the Git workflow. Merge to `main` is the owner's decision.

@@ -1,0 +1,22 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Core;
+
+use InvalidArgumentException;
+use RuntimeException;
+
+final class HttpException extends RuntimeException
+{
+    public function __construct(
+        public readonly int $status,
+        string $message,
+        public readonly array $errors = [],
+        public readonly array $headers = [],
+    ) {
+        if ($status < 400 || $status > 599) {
+            throw new InvalidArgumentException('Invalid HTTP error status.');
+        }
+        parent::__construct($message);
+    }
+}
