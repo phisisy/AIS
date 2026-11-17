@@ -194,6 +194,48 @@ lock, including its `auth_version`. Password re-confirmation has its own rate
 limit (5 per IP+admin, 30 per IP per 15 minutes; successful attempts count) in
 `auth/reauth-attempts.json`, separate from login.
 
+## Security events (T-04)
+
+When the route guard refuses a request to an admin route, it appends one event to
+`auth/security-events.json` under the runtime path. This file is separate from the
+admin audit log, which records what admins did.
+
+| Field | Value |
+|---|---|
+| `ts`, `at` / `last_ts`, `last_at` | First and latest server time (Unix and UTC ISO-8601) |
+| `count` | Number of identical refusals merged into this entry |
+| `type` | `unauthenticated` (401: no, expired or forged session) · `forbidden_role` (403) · `csrf_failed` (403) |
+| `route` | The registered route pattern, e.g. `PATCH /api/admin/users/{id}/status` (never the raw URL) |
+| `actor_id` | Signed-in user id, or `null` when anonymous |
+| `outcome` | `refused` |
+
+Nothing from the client is stored: no URLs, query strings, bodies, headers,
+cookies, session IDs, tokens or passwords. Every field is built by the server from
+fixed values, so log injection is impossible by construction. Invalid values are
+dropped. Responses are byte-for-byte unchanged.
+
+Bounds and flood resistance:
+- Repeats of the same type, route and actor within 60 seconds increase `count`
+  instead of adding entries.
+- Anonymous entries (cap 500) and signed-in entries (cap 1,000) are capped
+  separately, so anonymous traffic can't push out events that identify a user.
+- Entries older than 30 days are removed.
+- Writers never wait for the file lock: if another request holds it, that event
+  is dropped rather than making the refused request queue.
+
+Logging is best-effort. If the file can't be written, the request is still
+refused with the same 401/403 and the handler never runs. A corrupt event file is
+renamed to `security-events.json.corrupt-<time>`, a fixed message goes to the PHP
+error log, and logging resumes with a new file.
+
+Not security events:
+- Errors raised inside an admin handler after the guard has allowed the request
+  (the admin audit log records those as `denied`).
+- Server errors (500) during the guard's checks, for example an unreadable user store.
+
+Opt a route in with `$guard->roles([...], $handler, 'METHOD /path/{id}')`. The six
+`/api/admin/users*` routes are opted in.
+
 ## Core interfaces
 
 - `app/bootstrap.php` returns an explicit array container with `config`,

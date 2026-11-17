@@ -104,3 +104,30 @@ Full evidence is in `ai-coordination/T03_IMPLEMENTATION_REPORT.md`.
 - Read-only security review: no Critical or High findings. The Medium and all Low findings are fixed and tested. One Info item (admin resetting another admin's password) is an owner decision.
 - Last-admin protection: two independent protections under one exclusive lock. Multi-process races pass, and mutation checks show the race tests fail when both protections are removed.
 - Not merged; awaiting owner review.
+
+## T-04 — Security-event logging — **VERIFIED** (2026-11-17), not merged
+
+| # | Owner requirement | Evidence |
+|---|---|---|
+| 1 | Log refused admin-route access | All 6 `/api/admin/users*` routes opted in; HTTP test: anonymous, forged session, student, missing CSRF |
+| 2 | Timestamp, route id, type, outcome, safe actor | `ts/at/last_ts/last_at`, route pattern constant, enum type, `refused`, user id or null |
+| 3 | No passwords, tokens, cookies, session ids, bodies | HTTP test scans the raw file for body password, forged cookie, CSRF tokens, `AIS_SESSION`, `password`, email, field values |
+| 4 | Log injection | Only server-built values; route validated by an anchored regex at registration; invalid input dropped (newline, query, case, unknown type) |
+| 5 | Bounded storage/retention | 500 anonymous + 1,000 signed-in entries, 30 days, 60-second merging (count) |
+| 6 | 401/403 unchanged | Exact response bodies asserted; all 84 earlier tests still pass |
+| 7 | Logging failure never bypasses | `record()` catches Throwable; broken store (directory), busy lock and corrupt file all tested; handler never runs on refusal |
+| 8 | No duplicates | One record per refusal; handler errors are outside the guard's try; admin audit stays empty for guard refusals |
+| 9 | Tests | 7 new tests (unit + HTTP) |
+| 10 | Separate from admin audit | Own file and lock (`auth/security-events.json`) |
+
+Results: **91/91** tests, 62/62 lint, Apache PASS. Mutation checks (each reverted):
+- logging errors propagate → 3 fail
+- handler inside the try → 1 fails
+- logging removed → 2 fail
+- waiting for the lock → suite deadlocks (killed by a timeout; its temp dir was cleaned up)
+- merging off → 1 fails
+
+Security review: no Critical or High.
+- **Medium fixed:** an anonymous flood could wipe the log and queue workers. Fixed with merging, separate caps, and a non-blocking lock that drops the event when busy.
+- **Low fixed:** a corrupt event file silenced all logging. Now quarantined and reset, with a test.
+- **Info:** 500s during guard checks are not logged. Documented in the README.

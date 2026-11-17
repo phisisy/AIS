@@ -30,10 +30,12 @@ final class JsonStore
      * The callback receives array &$data and may return any value.
      * Commit only after it returns successfully. Do not nest operations on this
      * store (including another JsonStore pointing at the same file).
+     * With $wait = false the call fails immediately ('Store is busy.') instead of
+     * queueing behind another writer; use it only for best-effort data.
      */
-    public function transaction(callable $callback): mixed
+    public function transaction(callable $callback, bool $wait = true): mixed
     {
-        return $this->locked(LOCK_EX, function () use ($callback): mixed {
+        return $this->locked($wait ? LOCK_EX : LOCK_EX | LOCK_NB, function () use ($callback): mixed {
             $data = $this->readUnlocked();
             $result = $callback($data);
             if (!is_array($data)) {
@@ -60,8 +62,8 @@ final class JsonStore
         }
         $this->busy = true;
         try {
-            if (!flock($lock, $operation)) {
-                throw new RuntimeException('Unable to lock store.');
+            if (!flock($lock, $operation, $wouldBlock)) {
+                throw new RuntimeException(($operation & LOCK_NB) && $wouldBlock ? 'Store is busy.' : 'Unable to lock store.');
             }
             return $callback();
         } finally {

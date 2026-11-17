@@ -6,6 +6,7 @@ use App\Auth\Controllers\UserController;
 use App\Auth\Services\UserService;
 use App\Auth\Middleware\RouteGuard;
 use App\Auth\Services\AuthorizationService;
+use App\Auth\Services\SecurityEventLog;
 use App\Auth\Repositories\MockUserRepository;
 use App\Auth\Services\AuthService;
 use App\Auth\Services\LoginRateLimiter;
@@ -41,7 +42,11 @@ $limiter = new LoginRateLimiter(new JsonStore($runtime . '/auth/login-attempts.j
 $container['auth'] = new AuthService($container['users'], $container['session'], $limiter);
 // Team 2 — RBAC (T-02). Modules protect routes with $container['guard']->roles([...], $handler).
 $container['authorization'] = new AuthorizationService();
-$container['guard'] = new RouteGuard($container['auth'], $container['authorization'], $container['session']);
+// T-04: refused access to admin routes is recorded here (separate from the admin audit log).
+$eventsPath = $runtime . '/auth/security-events.json';
+$container['security_events'] = new SecurityEventLog(new JsonStore($eventsPath), $eventsPath);
+$container['guard'] = new RouteGuard($container['auth'], $container['authorization'], $container['session'],
+    $container['security_events']);
 // REMOTE_ADDR only: forwarded headers are client-controlled and ignored.
 $clientIp = static fn (): string => (string) ($_SERVER['REMOTE_ADDR'] ?? '');
 $container['auth_controller'] = new AuthController($container['auth'], $container['session'], $clientIp);
