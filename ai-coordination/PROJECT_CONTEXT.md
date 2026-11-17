@@ -68,7 +68,7 @@ Codex's sandbox denies writes to `.git` by design, so **Codex never runs git wri
 1. Before a task starts, Claude creates `task/T-xx-<name>` from `main` and checks it out. The task entry names the branch.
 2. Codex edits working-tree files only. Changes stay uncommitted.
 3. Claude reviews the uncommitted changes with `git status` + `git diff` (and `git diff --no-index` for new files).
-4. On `VERIFIED`, Claude commits the task's files on the task branch. Only the owner merges to `main`.
+4. On `VERIFIED`, Claude commits the task's files on the task branch. Merging to `main` needs the owner's approval for each merge. Claude may run the merge once approved (T-00 merged this way 2026-11-17).
 5. On `CHANGES_REQUESTED`, the changes stay uncommitted for Codex to fix. Nobody discards them.
 6. Claude never edits application source while a task is `IN_PROGRESS`, and never overwrites uncommitted work.
 7. No destructive database operations. No changes to Team 6's shared schema without Team 6 + owner approval.

@@ -15,7 +15,7 @@ Roles: student | faculty | registrar | admin
 - `User.id` is the **account** ID. It is never the same thing as a student ID or faculty ID.
 - Team 3 maps account → student profile (`student.user_id`); Team 5 maps account → faculty profile (`faculty.user_id`).
 - A role alone grants module access, **not** access to a specific record. Ownership is decided by the owning module.
-- Login identifier: **email** ⚠ (B-06).
+- Login identifier: **email**, trimmed and lowercased (B-06, approved by owner 2026-11-17).
 
 ## 2. HTTP endpoints
 

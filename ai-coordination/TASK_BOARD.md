@@ -11,7 +11,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | ID | Team | Title | Depends on | Status |
 |---|---|---|---|---|
 | T-00 | Shared | Core HTTP skeleton + test runner | — (B-01, B-02 resolved) | VERIFIED |
-| T-01 | 2 | Authentication & sessions | T-00, B-06 | PROPOSED |
+| T-01 | 2 | Authentication & sessions | T-00 ✔, B-06 ✔ | APPROVED |
 | T-02 | 2 | RBAC middleware & authorization service | T-01 | PROPOSED |
 | T-03 | 2 | User administration + audit logging | T-02 | PROPOSED |
 | T-10 | 3 | Student profiles | T-02 | PROPOSED |
@@ -49,8 +49,9 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 ### T-01 — Authentication & sessions
 - **Team:** 2
 - **Description:** User model, `UserRepositoryInterface` + mock repository, Session wrapper, AuthService (login/logout/requireUser), login rate limiter, CSRF token, `/api/auth/*` routes, dev seeder with fictional accounts.
-- **Files allowed to change:** `app/Auth/**`, `routes/auth.php`, `app/bootstrap.php` (Auth wiring only), `database/seeders/dev_users.php`, `tests/Auth/*`
-- **Dependencies:** T-00, B-06
+- **Files allowed to change:** `app/Auth/**`, `routes/auth.php`, `app/bootstrap.php` (Auth wiring only), `database/seeders/dev_users.php`, `tests/Auth/*`. For criterion 7 only: `app/Core/JsonStore.php` (bounded `rename()` retry), `config/app.php` (`APP_ENV` validation), `.env.example`, `README.md`, `tests/Core/StorageTest.php`, `tests/Core/ConfigTest.php`
+- **Dependencies:** T-00 (VERIFIED, merged), B-06 (resolved: email)
+- **Branch:** `task/T-01-auth`, created from `main` at `c2a5604` and checked out by Claude. Codex runs no git write commands.
 - **Acceptance criteria:**
   1. Contract endpoints `csrf`, `login`, `logout`, `me` behave per `API_CONTRACTS.md`.
   2. The same 401 body for unknown email, wrong password, inactive account, and bad types. Dummy hash verification for unknown users.
@@ -59,8 +60,8 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
   5. Rate limit: 5 per IP+email and 30 per IP per 15 min → 429 + `Retry-After`.
   6. Responses never contain password hashes or session IDs.
   7. (From T-00 review) `APP_ENV` is validated and unknown values fail closed. Session and JSON store files work when the workspace is on OneDrive: use a bounded `rename()` retry, or document `APP_RUNTIME_PATH` outside OneDrive in README/.env.example.
-- **Required tests:** login success/failure matrix, CSRF missing/invalid, session fixation (ID changes), timeouts, rate limit, deactivated user mid-session → 401, HTTP-level login→me→logout flow.
-- **Status:** PROPOSED
+- **Required tests:** login success/failure matrix, CSRF missing/invalid, session fixation (ID changes), timeouts, rate limit, deactivated user mid-session → 401, HTTP-level login→me→logout flow. All 30 T-00 tests must still pass.
+- **Status:** APPROVED (owner, 2026-11-17)
 
 ### T-02 — RBAC middleware & authorization service
 - **Team:** 2

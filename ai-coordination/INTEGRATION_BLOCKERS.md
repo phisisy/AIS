@@ -9,7 +9,7 @@ Status key: **OPEN** (needs owner decision) · **DEFERRED** (accepted gap) · **
 | B-03 | High | Team 6 shared schema not finalized | OPEN | T-40 (MySQL repositories) |
 | B-04 | Medium | Who owns "instructor of a section" | OPEN | T-21, T-30 |
 | B-05 | Medium | Grade scale and finalization workflow | OPEN | T-32 |
-| B-06 | Medium | Login identifier: email or username | OPEN | T-01 |
+| B-06 | Medium | Login identifier: email or username | RESOLVED 2026-11-17 (email) | — |
 | B-07 | Medium | Faculty access to student profiles | OPEN | T-11 |
 | B-08 | Low | Enrollment eligibility beyond MVP rules | OPEN | T-22 |
 | B-09 | Medium | Persistent session revocation | DEFERRED | — |
@@ -40,7 +40,7 @@ Students see only finalized grades. Owner must confirm the scale, whether regist
 
 ## B-06 — Login identifier (Medium)
 The frontend guide shows "username/password". A future shared schema may only have email.
-**Recommendation:** email now (works for every role, unique). Confirm with Team 6.
+**Resolved (owner, 2026-11-17):** login with **email**, trimmed and lowercased, unique. Team 6 must keep a unique email column on users.
 
 ## B-07 — Faculty access to student profiles (Medium)
 Team 3 must "restrict faculty access to explicitly authorized information".
