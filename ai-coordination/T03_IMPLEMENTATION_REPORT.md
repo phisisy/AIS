@@ -191,3 +191,43 @@ No Critical or High findings.
 ## 12. Readiness
 
 **Ready for owner review.** Every A–F requirement is either implemented and tested, or explicitly listed in section 10. T-03 is **not merged** and T-04 is not started. Codex and Gemini should stay closed until the owner confirms.
+
+---
+
+## 13. Owner review decisions and merge (2026-11-17)
+
+### Decision 2: admin-to-admin password resets blocked (commit `0253cc0`)
+- `POST /api/admin/users/{id}/reset-password` now refuses any target holding `admin` (active or inactive, including multi-role) with **409** `{"success":false,"message":"Administrator passwords cannot be reset through this endpoint.","errors":{}}`. The check runs inside the locked transaction, so it reads current data.
+- Preserved:
+  - Admin password re-confirmation and its rate limit run first. Someone who hasn't confirmed their password only ever sees 403/429.
+  - Admin → non-admin resets work as before.
+  - Self-reset still returns its own 409.
+- Audit: refusals are recorded as `user.password_reset` / `denied` / `target_is_admin`. The target's password and `auth_version` are unchanged, and its sessions stay valid.
+- Regression tests (+2):
+  - service: active, inactive and multi-role admin targets refused; non-admin reset works; audit sequence checked
+  - HTTP: exact 409 body; target session still valid; attempted password rejected
+
+  The existing `auth_version` re-check test now simulates the password change directly in storage, since the API path is blocked by design.
+- Mutation check: removing the block makes both new tests fail; restored.
+- Security verification (read-only subagent): no Critical, High or Medium issues. Bypass via input, roles, status or race: none.
+- **Known gap (Low, documented in README):** demote → reset → re-promote still achieves the outcome. Every step is audited for the same `target_id`, so it's detectable but not prevented.
+- **Open need (documented):** a secure administrator account-recovery process. No second-admin approval workflow was built, per the owner.
+
+### Pre-merge checks (all passed)
+1. Tests: 84/84 (82 reported + 2 new regression tests).
+2. PHP syntax: 59 files, 0 failures.
+3. Apache: PASS for both document roots.
+4. Working tree: clean, no ignored files.
+5. Scope: only `app/Auth/`, `tests/Auth/`, `routes/auth.php`, `app/bootstrap.php`, `README.md`, `ai-coordination/`. Branch based on `main` `96052c2`.
+6. Security findings: all fixed except the Low multi-step gap, which is documented.
+7. Sensitive data: no `.env`, sessions, stores, keys or hashes tracked (only the documented constant `DUMMY_HASH`). `C:/ais-runtime` was not created.
+
+### Merge
+- `task/T-03-admin` (`bf5a268`, `45f660f`, `0253cc0`) merged into `main` with `--no-ff` as **`8451cd4`**.
+- On `main` after the merge: **84 passed, 0 failed**. Apache PASS.
+
+### Other decisions recorded (not implemented)
+- **Decision 3:** security-event logging for refused admin-route access → new task **T-04** (PROPOSED; needs your go-ahead).
+- **Decision 4:** admin dashboard deferred, to be coordinated with Team 1.
+- **Decision 5:** read-only audit endpoint → **T-05** (PROPOSED, planning only).
+- **Database limitation (restated):** the last-admin concurrency guarantee is proven for the file-backed mock storage only. **It is not claimed for MariaDB.** T-40 must implement and verify equivalent transactional locking. `APP_REPOSITORY=mysql` remains refused at startup; no unsafe MySQL administration mode exists.
