@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(*DROP *)",
+      "Bash(*drop *)",
+      "Bash(*TRUNCATE*)",
+      "Bash(*truncate*)",
+      "Bash(*DELETE FROM*)",
+      "Bash(*delete from*)",
+      "Bash(*migrate reset*)",
+      "Bash(*migrate:fresh*)",
+      "Bash(*migrate:reset*)",
+      "Bash(*migrate:rollback*)",
+      "Bash(*force-reset*)",
+      "Bash(*db:drop*)",
+      "Bash(*dropdb*)",
+      "Bash(*flush*)",
+      "Bash(*downgrade*)"
+    ]
+  }
+}
