@@ -2,6 +2,18 @@
 
 Established 2026-11-17 by the owner's instruction "Claude + AGY multi-agent synchronization protocol". This file complements `TASK_BOARD.md` (task scope and status) and `PROJECT_CONTEXT.md`; it doesn't replace them.
 
+## Temporary reassignment (owner, 2026-11-17)
+
+- **AGY:** has hit its weekly usage limit and is `UNAVAILABLE_USAGE_LIMIT`, with no active assignments. It may return after the limit resets.
+- **Codex:** takes over AGY's role as the independent QA, security and integration reviewer, with immediate effect. Wherever this protocol says "AGY" for reviewing, read "the current independent reviewer". That is Codex until the owner reassigns the role.
+- **Report file:** Codex writes reviews to `CODEX_REVIEW_REPORT.md`. `AGY_REVIEW_REPORT.md` is kept unchanged as history.
+- **Handoff status:** `READY_FOR_CODEX_REVIEW` (instead of `READY_FOR_AGY_REVIEW`).
+- **Independence caveat:**
+  - Codex wrote part of the T-20 code: the phase-1 backend in `b04fec4`.
+  - A review of that code by Codex is therefore not fully independent. The report must say so.
+  - The owner decides whether the review is enough for merging, or whether AGY (once available) or another reviewer should also review those files.
+- **While reviewing**, Codex makes no source edits, commits, merges or pushes.
+
 ## Participants
 
 There are four participants. See `AGENT_REGISTRY.md` for each one's permissions.
@@ -28,9 +40,9 @@ Rules for what an agent may claim:
 
 ## Status values
 
-`IDLE`, `PLANNING`, `IMPLEMENTING`, `TESTING`, `REVIEWING`, `BLOCKED`, `WAITING_FOR_OWNER`, `COMPLETED` and `UNKNOWN`.
+`IDLE`, `PLANNING`, `IMPLEMENTING`, `TESTING`, `REVIEWING`, `BLOCKED`, `WAITING_FOR_OWNER`, `COMPLETED`, `UNKNOWN` and `UNAVAILABLE_USAGE_LIMIT`.
 
-The task-level status `READY_FOR_AGY_REVIEW` is used in `AGENT_TASKS.md`.
+The task-level statuses `READY_FOR_AGY_REVIEW` and `READY_FOR_CODEX_REVIEW` are used in `AGENT_TASKS.md`.
 
 ## File ownership and locking
 
@@ -56,7 +68,7 @@ When Claude finishes a task:
 
 ## Feedback: AGY to Claude
 
-AGY writes its report to `AGY_REVIEW_REPORT.md`, or the owner pastes it. Each report includes:
+The reviewer writes its report to its own file: `CODEX_REVIEW_REPORT.md` for Codex, `AGY_REVIEW_REPORT.md` for AGY. The owner may paste a report instead. Each report includes:
 
 - the task ID, the branch, and the exact commit reviewed
 - the tests that were run

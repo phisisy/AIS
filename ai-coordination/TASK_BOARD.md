@@ -1,6 +1,6 @@
 # Task Board — AIS Backend
 
-Statuses: `PROPOSED` · `APPROVED` · `IN_PROGRESS` · `READY_FOR_REVIEW` · `READY_FOR_AGY_REVIEW` · `CHANGES_REQUESTED` · `VERIFIED` · `BLOCKED`
+Statuses: `PROPOSED` · `APPROVED` · `IN_PROGRESS` · `READY_FOR_REVIEW` · `READY_FOR_AGY_REVIEW` · `READY_FOR_CODEX_REVIEW` · `CHANGES_REQUESTED` · `VERIFIED` · `BLOCKED`
 
 Rules: only the project owner sets `APPROVED`. Codex works only on `APPROVED` tasks, edits only the listed
 files, and only one `IN_PROGRESS` task may touch a given file. Tests are offline (`php tests/run.php`, mock repositories) unless stated otherwise.
@@ -20,7 +20,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-11a | 3 | Academic records + StudentDirectory | T-10 ✔ | VERIFIED (merged `d062a5e`; implementation `0b91668`; see `T11A_IMPLEMENTATION_REPORT.md`) |
 | T-11b | 3 | Course catalog, curriculum, real enrollment/grade summaries | T-11a, D1, T-22, T-32 | PROPOSED (not approved) |
 | T-06 | 2 | Protected admin registry + owner-only recovery CLI | T-03 ✔ | PROPOSED (design conditionally approved; `PROPOSAL_ADMIN_PROTECTION_RECOVERY.md` v2; implementation not approved) |
-| T-20 | 4 | Terms & sections catalog | T-02 ✔ | READY_FOR_AGY_REVIEW (policy alignment `0624eb7`, delivery_mode; handoff: `AGENT_HANDOFF.md`; APPROVED by owner 2026-11-17; committed `b04fec4` on `task/T-20-terms-sections`, not merged; see `T20_IMPLEMENTATION_REPORT.md`) |
+| T-20 | 4 | Terms & sections catalog | T-02 ✔ | READY_FOR_CODEX_REVIEW (reviewer reassigned AGY → Codex, owner 2026-11-17; last code change `0624eb7`; handoff: `AGENT_HANDOFF.md`; APPROVED by owner 2026-11-17; committed `b04fec4` on `task/T-20-terms-sections`, not merged; see `T20_IMPLEMENTATION_REPORT.md`) |
 | T-21 | 4 | SectionDirectory, faculty identity port, instructor assignments | T-20, B-04 ✔ | PROPOSED (scope revised for B-04; max 5 instructors per section confirmed by owner, Q7) |
 | T-22 | 4 | Enrollment requests, approval & schedule | T-11, T-21 | PROPOSED |
 | T-30 | 5 | Faculty profiles + FacultyIdentityLookup | T-21, B-04 ✔ | PROPOSED (assignments moved to Team 4 by B-04) |
@@ -150,7 +150,7 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 - **Dependencies:** T-02
 - **Acceptance criteria:** Filter by term, course or search. Remaining slots computed from approved count. Meetings validated (day enum, `start < end`, HH:MM). A section's own meetings must not overlap. Capacity ≥ 1 and not below approved count (409). Registrar/admin only for writes.
 - **Required tests:** listing/filtering, meeting validation, capacity rules, role matrix.
-- **Status:** READY_FOR_AGY_REVIEW. Original: `b04fec4` (158/158; security review: L-1 and L-2 fixed, L-3 out of scope). Policy alignment `0624eb7` (owner decisions Q1–Q7; delivery_mode): 163/163 tests, 104/104 lint, Apache PASS. Conditionally approved; awaiting AGY review of the branch head and owner merge approval.
+- **Status:** READY_FOR_AGY_REVIEW. Original: `b04fec4` (158/158; security review: L-1 and L-2 fixed, L-3 out of scope). Policy alignment `0624eb7` (owner decisions Q1–Q7; delivery_mode): 163/163 tests, 104/104 lint, Apache PASS. Conditionally approved. Awaiting the independent review (Codex, temporarily replacing AGY, which is unavailable; Codex wrote phase 1, so the review is not fully independent) and owner merge approval.
 
 ### T-21 — SectionDirectory + InstructorLookup interface
 - **Team:** 4

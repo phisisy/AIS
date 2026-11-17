@@ -4,7 +4,85 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
-## T-20 — Terms & Sections, after policy alignment → AGY review (prepared by Claude, 2026-11-17) — CURRENT
+## T-20 — Terms & Sections → CODEX independent review (prepared by Claude, 2026-11-17) — CURRENT
+
+- **Status:** READY_FOR_CODEX_REVIEW.
+  - The reviewer was reassigned from AGY (`UNAVAILABLE_USAGE_LIMIT`) to Codex by the owner.
+  - **Not started:** Codex hasn't confirmed.
+  - The AGY handoff below is superseded but kept.
+- **Branch:** `task/T-20-terms-sections`
+- **Exact review target:**
+  - Code: **`0624eb7`**, the last commit that changes code or tests. It was verified by Claude: 163/163 tests, 104/104 lint, Apache PASS. 163/163 was re-run at `60ac236` on 2026-11-17.
+  - The commits after it (`60ac236` and the Codex-reassignment commit) change only `ai-coordination/*.md`.
+  - **Review range:** `592d912..task/T-20-terms-sections` (base `main` `592d912`). Report the exact head hash you reviewed.
+- **Independence caveat:**
+  - **Codex wrote the phase-1 backend in `b04fec4`:** `app/Enrollment/{Models,Repositories,Services,Controllers}/*`, `routes/enrollment.php`, the Enrollment wiring in `app/bootstrap.php`, and the README Enrollment section.
+  - Claude later changed `Section.php`, `SectionService.php`, `SectionController.php` and `MockCatalogRepository.php` in `0624eb7`. Claude's backend-developer agent made the L-1 fix to `MockCatalogRepository.php`.
+  - Codex didn't write the tests (Claude's qa-engineer), the seeder (Claude's database-engineer) or the plan (Claude's architect).
+  - Please review in a fresh session, without relying on memory of writing the code, and state the caveat in the report.
+
+### Worktree safety
+
+- Review in a **separate worktree**. The owner can create one, for example `git worktree add ..\AIS_REVIEW_T20 task/T-20-terms-sections`. Don't use the shared working tree at `AIS_SYSTEM`.
+- Claude won't edit `task/T-20-terms-sections` until the review is reported, unless the owner says otherwise.
+- Test runs write runtime files, so point `APP_RUNTIME_PATH` at a scratch folder outside both trees. Don't run the seeder against a shared runtime.
+- **No application source edits, commits, merges or pushes.** The only file Codex writes is `ai-coordination/CODEX_REVIEW_REPORT.md`, and only in its own worktree. The owner or Claude copies the report back.
+
+### What to review
+
+- **Scope:** everything in `592d912..HEAD`. The details of the original implementation and of the policy change (`delivery_mode`) are in the superseded handoffs below and in `T20_IMPLEMENTATION_REPORT.md` (§1–§11).
+- **Specs:**
+  - `docs/plans/T-20-terms-sections.md` (§3 API, P9, §5–§6, §14–§16)
+  - `ai-coordination/API_CONTRACTS.md` (Team 4 section and `Section` shape)
+  - `ai-coordination/ARCHITECTURE.md` §6 (security checklist)
+- **Focus areas:**
+  1. **Authorization:** RBAC and CSRF on all 7 routes. The service-level `requireRole` on writes. Anonymous, student and faculty can't write.
+  2. **Mass assignment:** allowlists at the controller, service and repository layers. `approved_count`, `remaining`, `id`, `term_id`, `course_code`, `section_code`, `code` are not client-writable, and `delivery_mode` is the only new writable field.
+  3. **Concurrency:** these checks all run inside one lock:
+     - unique term code
+     - a single current term
+     - the term exists
+     - unique section triple
+     - capacity ≥ `approved_count`
+     - the mode/meetings rule on the merged row during PATCH
+  4. **Fail-closed storage:** `snapshot()` and `fromArray`, including duplicate natural keys, invalid or missing `delivery_mode`, and a `scheduled` row with no meetings. Failures write nothing.
+  5. **Delivery mode:** scheduled needs at least 1 meeting; only an explicit `tba` or `online_async` may have 0; no TBA inference from an empty list; overlap unchanged for every mode.
+  6. **Input validation:** meetings as `stdClass` with exact keys, HH:MM times, the Unicode control and format character filter, and array-valued query parameters refused.
+  7. **Regression:** T-00 to T-11a behaviour unchanged.
+  8. **Seeder:** command line only, mock repository only, never overwrites, and reports a partial failure.
+
+### Checks to run independently
+
+- `php tests/run.php`. Expected: 163 passed.
+- `php -l` on every PHP file. Expected: 104 files.
+- `php tests/Core/apache_check.php`. This needs XAMPP and must run outside a sandbox.
+- Any additional authorization, contract or concurrency probes you think are needed. Keep them in your worktree or a scratch folder.
+
+### Known limitations (already documented, no need to re-report)
+
+- L-3: "Unknown field" errors use client-supplied keys (Core, predates T-20).
+- I-3: the store accepts only the top-level keys `terms` and `sections`, so T-21 and T-22 must extend the list.
+- D1: course data stored on the section.
+- Whole-store reads on every request.
+- Mutation M4 is equivalent: the service repeats the role check.
+- Claude's security-reviewer wasn't re-run on `0624eb7`.
+
+### Report
+
+Write to `ai-coordination/CODEX_REVIEW_REPORT.md` using its template, with:
+
+- task ID, branch and exact commit hash
+- the tests you ran
+- findings by severity, with evidence and file paths
+- recommended corrections
+- the independence caveat
+- a verdict: `APPROVE`, `CHANGES_REQUESTED` or `BLOCKED`
+
+Claude will treat the review as complete only after reading that report.
+
+---
+
+## T-20 — Terms & Sections, after policy alignment → AGY review (prepared by Claude, 2026-11-17) — SUPERSEDED (AGY unavailable; reassigned to Codex above)
 
 - **Status:** READY_FOR_AGY_REVIEW. This replaces the `909a000` handoff below.
 - **Branch:** `task/T-20-terms-sections`
