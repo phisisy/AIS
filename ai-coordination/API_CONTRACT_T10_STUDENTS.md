@@ -43,7 +43,7 @@ Any non-empty subset of `first_name`, `middle_name`, `last_name`, `program_code`
 
 ## 4. Access rules for `GET /api/students/{id}` (server-side, in this order)
 1. **registrar or admin:** full profile.
-2. **The record's own account** (`student.user_id === session user id`): full profile.
+2. **The record's own account** (`student.user_id === session user id`) **while it holds the `student` role**: full profile. An account that lost the role keeps its stored profile, but gets 404 here (owner decision 3).
 3. **faculty:** the summary (§7), only if the faculty visibility source (§8) confirms the student is enrolled in at least one section officially assigned to this faculty user. Otherwise 404.
 4. **Anyone else:** 404 `{"success":false,"message":"Student not found.","errors":{}}`. A nonexistent id returns exactly the same.
 
@@ -51,6 +51,15 @@ Any non-empty subset of `first_name`, `middle_name`, `last_name`, `program_code`
 - `STUDENT_NUMBER_PATTERN` in `.env` is a PCRE body without delimiters or anchors, wrapped as `\A(?:…)\z`. Default `[A-Z0-9][A-Z0-9-]{2,19}`: 3–20 uppercase letters, digits or hyphens. This deliberately assumes nothing about the school's final policy.
 - Whatever the pattern, values must also be 1–32 characters from `[A-Z0-9-/]` after uppercasing.
 - An invalid configured pattern fails at startup (generic 500), never silently accepting everything.
+
+- **The default is a generic development placeholder, not the institution's policy** (owner decision 4). The school's real format will be supplied later and set through `STUDENT_NUMBER_PATTERN` without code changes.
+
+## 5a. Profile retention when the account changes (owner decision 3)
+- Profiles are never deleted or altered because the linked Team 2 account is deactivated or loses `student`. Student number, academic status, program, year level and timestamps all stay as they were.
+- A deactivated account cannot authenticate (T-01), so every endpoint gives 401.
+- An account without `student` gets 403 on `/me` (guard) and 404 on its own `/{id}` (rule 2).
+- Registrar and admin access to the record is unchanged.
+- Academic status is never changed automatically by account changes.
 
 ## 6. Program catalog interface (temporary, Team 3)
 ```php
@@ -92,7 +101,8 @@ interface FacultyStudentVisibility {
 }
 ```
 - **T-10 ships `DenyAllFacultyVisibility`, which always returns `[]`.** No class assignments are invented, so faculty receive 404 for every student.
-- If a future implementation throws, Team 3 treats it as not visible (404) and logs only the exception class.
+- If a future implementation throws, Team 3 treats it as not visible (404) and logs only the exception class. A malformed answer is discarded entirely, and only sections with `enrollment_status === "approved"` count.
+- The source is queried for every faculty request, including ids that don't exist, so response timing can't reveal which records exist.
 - The real implementation is wired in T-31, using Team 5's teaching assignments and Team 4's approved enrollments.
 
 ## 9. Errors
@@ -100,7 +110,7 @@ interface FacultyStudentVisibility {
 |---|---|
 | 401 / 403 | Guard (T-02): not signed in / role not in the allowlist / CSRF |
 | 404 | Missing **or** not visible to the caller (identical body) |
-| 409 | `student_number` taken, account already has a profile |
+| 409 | `student_number` taken; account already has a profile; on PATCH, a concurrent change left `year_level` above the program's maximum (re-checked inside the write lock; reload and retry) |
 | 422 | Validation (field-keyed `errors`), unknown fields, account missing/inactive/not a student, unknown program |
 | 500 | Storage unreadable or corrupt, invalid configured pattern (generic body only) |
 

@@ -16,6 +16,12 @@ use App\Core\JsonStore;
 use App\Core\Response;
 use App\Core\Router;
 use App\Core\RuntimeDirectory;
+use App\Students\Contracts\DenyAllFacultyVisibility;
+use App\Students\Controllers\StudentController;
+use App\Students\Repositories\JsonProgramCatalog;
+use App\Students\Repositories\MockStudentRepository;
+use App\Students\Services\StudentNumberPolicy;
+use App\Students\Services\StudentService;
 
 require_once __DIR__ . '/autoload.php';
 
@@ -57,6 +63,18 @@ $container['user_controller'] = new UserController(
         new LoginRateLimiter(new JsonStore($runtime . '/auth/reauth-attempts.json'))),
     $clientIp
 );
+// Team 3 — student records (T-10). Faculty visibility denies everything until T-31 wires a
+// verified class-assignment source. An invalid STUDENT_NUMBER_PATTERN fails closed here.
+$container['programs'] = new JsonProgramCatalog(new JsonStore($runtime . '/students/programs.json'));
+$container['student_visibility'] = new DenyAllFacultyVisibility();
+$container['student_controller'] = new StudentController(new StudentService(
+    new MockStudentRepository(new JsonStore($runtime . '/students/students.json')),
+    $container['programs'],
+    $container['users'],
+    $container['authorization'],
+    $container['student_visibility'],
+    new StudentNumberPolicy(Environment::get('STUDENT_NUMBER_PATTERN'))
+));
 foreach (['auth', 'students', 'enrollment', 'faculty'] as $module) {
     $register = require dirname(__DIR__) . '/routes/' . $module . '.php';
     $register($container['router'], $container);

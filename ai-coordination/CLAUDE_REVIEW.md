@@ -131,3 +131,10 @@ Security review: no Critical or High.
 - **Medium fixed:** an anonymous flood could wipe the log and queue workers. Fixed with merging, separate caps, and a non-blocking lock that drops the event when busy.
 - **Low fixed:** a corrupt event file silenced all logging. Now quarantined and reset, with a test.
 - **Info:** 500s during guard checks are not logged. Documented in the README.
+
+## T-10 — Student records — **VERIFIED** (2026-11-17), not merged
+
+Full evidence is in `ai-coordination/T10_IMPLEMENTATION_REPORT.md`.
+- Implementation commit `1ca73e6` on `task/T-10-student-records`. Suite 111/111 (91 preserved + 20 new), lint 79/79, Apache PASS.
+- Read-only security review: no Critical, High or Medium findings. The 3 Lows and 1 Info are fixed and tested; the remaining Info items are documented.
+- Faculty visibility denies all until T-31 provides a verified source; hidden and missing records are both 404.

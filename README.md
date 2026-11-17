@@ -236,6 +236,33 @@ Not security events:
 Opt a route in with `$guard->roles([...], $handler, 'METHOD /path/{id}')`. The six
 `/api/admin/users*` routes are opted in.
 
+## Student records (Team 3, T-10)
+
+Full contract: `ai-coordination/API_CONTRACT_T10_STUDENTS.md`. All routes use the
+T-02 guard; writes need `X-CSRF-Token`.
+
+| Method | Path | Who | Notes |
+|---|---|---|---|
+| GET | `/api/students` | registrar, admin | `?search=&program_code=&academic_status=&page=&per_page=` |
+| POST | `/api/students` | registrar, admin | Profile for an existing, active `student` account (no credentials are created). 409 on a duplicate number or account |
+| GET | `/api/students/me` | student | Own profile; 404 if none |
+| GET | `/api/students/{id}` | registrar, admin (full); own account (full); faculty (summary, see below) | Anything else is 404, identical to a missing record |
+| PATCH | `/api/students/{id}` | registrar, admin | Name, program, year level, academic status, admission year. Student number and account link can't be changed |
+
+- `academic_status`: `active`, `inactive`, `graduated`, `transferred`, `on_leave`. Separate from the account's active/inactive status.
+- Student numbers are uppercased and validated against `STUDENT_NUMBER_PATTERN` (see `.env.example`), and are always 1–32 characters of `A-Z 0-9 - /`. The default `[A-Z0-9][A-Z0-9-]{2,19}` is a **generic development placeholder, not the school's numbering policy**. Set the real format when the institution supplies it; no code change is needed.
+- Profiles are kept when the linked account is deactivated or loses `student`. The account can then no longer read its own profile (401 or 404), but registrar and admin still can, and academic status is never changed automatically.
+- `year_level` must fit the program's `max_year_level`. Programs come from a temporary Team 3 catalog (`students/programs.json`); Team 6 owns the final schema.
+
+**Faculty (B-07):** faculty get only `{id, student_number, full_name, program_code,
+year_level, sections}`, and only for students enrolled in a section officially
+assigned to them. That information comes from `FacultyStudentVisibility`, which
+**denies everyone** until T-31 wires a verified source from Teams 4 and 5. Errors or
+malformed answers from that source also deny. Faculty can't list or modify profiles.
+
+Development data (after `dev_users.php`): `php database/seeders/dev_students.php`
+creates 3 fictional programs and a profile for `student@example.test`.
+
 ## Core interfaces
 
 - `app/bootstrap.php` returns an explicit array container with `config`,
