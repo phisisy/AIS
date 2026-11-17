@@ -184,14 +184,14 @@ test('Students: the year-level/program check is re-run inside the lock and abort
     studentCase(function (string $dir, $service, $repository, $users): void {
         $service->create($users->findById(2), anaInput(['year_level' => 2]));
         // Another writer has meanwhile moved the student to a 2-year program at year 2.
-        $repository->update(1, ['program_code' => 'ASCT'], 'now');
+        $repository->update(1, ['program_code' => 'ASCT'], '2026-01-01T00:00:00Z');
         $before = file_get_contents($dir . '/students/students.json');
         $check = static function (array $row): void {
             if ($row['program_code'] === 'ASCT' && $row['year_level'] > 2) {
                 throw new HttpException(409, 'Validation failed.', ['year_level' => 'x']);
             }
         };
-        same(409, throws(HttpException::class, fn () => $repository->update(1, ['year_level' => 4], 'now', $check))->status);
+        same(409, throws(HttpException::class, fn () => $repository->update(1, ['year_level' => 4], '2026-01-01T00:00:00Z', $check))->status);
         same($before, file_get_contents($dir . '/students/students.json'));
     });
 });

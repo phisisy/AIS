@@ -74,6 +74,32 @@ function seedStudentRuntime(string $directory, bool $withUsers = true): void
     (new JsonProgramCatalog(new JsonStore($directory . '/students/programs.json')))->seed(studentPrograms());
 }
 
+/** Test-only counts source. */
+final class StubSummarySource implements App\Students\Contracts\AcademicSummarySource
+{
+    public function __construct(private readonly mixed $answer)
+    {
+    }
+
+    public function countsFor(int $studentId): ?array
+    {
+        if ($this->answer instanceof Throwable) {
+            throw $this->answer;
+        }
+        return $this->answer;
+    }
+}
+
+/** @return array{0: StudentService, 1: App\Students\Services\AcademicRecordService, 2: MockStudentRepository, 3: MockUserRepository, 4: App\Students\Services\RepositoryStudentDirectory} */
+function academicFixture(string $directory, $enrollment = null, $grades = null): array
+{
+    [$service, $repository, $users] = studentFixture($directory);
+    $records = new App\Students\Services\AcademicRecordService($repository,
+        new JsonProgramCatalog(new JsonStore($directory . '/students/programs.json')), new AuthorizationService(),
+        $enrollment ?? new App\Students\Contracts\UnavailableSummarySource(), $grades ?? new App\Students\Contracts\UnavailableSummarySource());
+    return [$service, $records, $repository, $users, new App\Students\Services\RepositoryStudentDirectory($repository, $users)];
+}
+
 /** @return array{0: StudentService, 1: MockStudentRepository, 2: MockUserRepository} */
 function studentFixture(string $directory, ?FacultyStudentVisibility $visibility = null, ?string $pattern = null): array
 {

@@ -125,7 +125,7 @@ final class StudentService
         $fields['academic_status'] ??= 'active';
         $fields['middle_name'] ??= null;
         $fields['admission_year'] ??= null;
-        return $this->students->create(['user_id' => $userId, 'student_number' => $number] + $fields, $this->now())->toArray();
+        return $this->students->create(['user_id' => $userId, 'student_number' => $number] + $fields, $this->now(), $actor->id)->toArray();
     }
 
     public function update(User $actor, int $id, array $input): array
@@ -146,7 +146,7 @@ final class StudentService
                 throw new HttpException(409, 'Validation failed.', ['year_level' => 'The year level no longer fits the program; reload and retry.']);
             }
         };
-        return $this->students->update($id, $changes, $this->now(), $check)->toArray();
+        return $this->students->update($id, $changes, $this->now(), $check, $actor->id)->toArray();
     }
 
     /** Validates the profile fields present in $input (all optional here; create checks required ones). */

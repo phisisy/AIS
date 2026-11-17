@@ -116,6 +116,27 @@ test('Students concurrency: a program change racing a year-level change never le
     }
 });
 
+test('Academic history concurrency: every concurrent tracked change gets exactly one gap-free history entry', function (): void {
+    for ($round = 0; $round < 3; $round++) {
+        $directory = tempDirectory();
+        try {
+            [$service, $repository, $users] = studentFixture($directory);
+            $service->create($users->findById(2), anaInput(['year_level' => 1]));
+            $results = raceStudentWorkers($directory, [['update', ['academic_status' => 'on_leave'], 1],
+                ['update', ['year_level' => 2], 1], ['update', ['program_code' => 'ASCT'], 1], ['update', ['first_name' => 'Anna'], 1]]);
+            same([true, true, true, true], array_column($results, 'ok'));
+            $entries = $repository->history(1, 1, 100)['entries'];
+            same([1, 2, 3, 4, 5, 6], array_column($entries, 'seq'));
+            $changes = array_map(static fn (array $e): string => $e['field'] . '=' . json_encode($e['to']), array_slice($entries, 3));
+            sort($changes);
+            same(['academic_status="on_leave"', 'program_code="ASCT"', 'year_level=2'], $changes);
+            same([2, 2, 2], array_column(array_slice($entries, 3), 'actor_id'));
+        } finally {
+            removeTestDirectory($directory);
+        }
+    }
+});
+
 test('Students storage failure: a write that cannot be committed leaves the store unchanged', function (): void {
     if (PHP_OS_FAMILY !== 'Windows') {
         return; // Uses Windows open-file replacement semantics (see StorageTest).
@@ -134,6 +155,9 @@ test('Students storage failure: a write that cannot be committed leaves the stor
         proc_close($holder);
         $holder = null;
         same($before, file_get_contents($directory . '/students/students.json'));
+        // Profile and history rolled back together: still only the 3 creation entries.
+        same(3, $repository->history(1, 1, 100)['total']);
+        same('active', $repository->findById(1)->toArray()['academic_status']);
     } finally {
         if (is_resource($holder)) {
             proc_close($holder);

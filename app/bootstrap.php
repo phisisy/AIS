@@ -17,6 +17,10 @@ use App\Core\Response;
 use App\Core\Router;
 use App\Core\RuntimeDirectory;
 use App\Students\Contracts\DenyAllFacultyVisibility;
+use App\Students\Contracts\UnavailableSummarySource;
+use App\Students\Controllers\AcademicRecordController;
+use App\Students\Services\AcademicRecordService;
+use App\Students\Services\RepositoryStudentDirectory;
 use App\Students\Controllers\StudentController;
 use App\Students\Repositories\JsonProgramCatalog;
 use App\Students\Repositories\MockStudentRepository;
@@ -67,14 +71,22 @@ $container['user_controller'] = new UserController(
 // verified class-assignment source. An invalid STUDENT_NUMBER_PATTERN fails closed here.
 $container['programs'] = new JsonProgramCatalog(new JsonStore($runtime . '/students/programs.json'));
 $container['student_visibility'] = new DenyAllFacultyVisibility();
+$container['students'] = new MockStudentRepository(new JsonStore($runtime . '/students/students.json'));
 $container['student_controller'] = new StudentController(new StudentService(
-    new MockStudentRepository(new JsonStore($runtime . '/students/students.json')),
+    $container['students'],
     $container['programs'],
     $container['users'],
     $container['authorization'],
     $container['student_visibility'],
     new StudentNumberPolicy(Environment::get('STUDENT_NUMBER_PATTERN'))
 ));
+// Team 3 — academic records (T-11a). Enrollment/grade summaries stay "unavailable" until
+// Teams 4/5 provide verified sources (T-11b). StudentDirectory is for Teams 4/5 in-process only.
+$container['academic_record_controller'] = new AcademicRecordController(new AcademicRecordService(
+    $container['students'], $container['programs'], $container['authorization'],
+    new UnavailableSummarySource(), new UnavailableSummarySource()
+));
+$container['student_directory'] = new RepositoryStudentDirectory($container['students'], $container['users']);
 foreach (['auth', 'students', 'enrollment', 'faculty'] as $module) {
     $register = require dirname(__DIR__) . '/routes/' . $module . '.php';
     $register($container['router'], $container);

@@ -45,10 +45,12 @@ Roles: student | faculty | registrar | admin
 | GET | /api/students/me | 🔒 | student | — | Profile linked to session user; 404 if none |
 | GET | /api/students/{id} | 🔒 | registrar, admin, student, faculty | — | Student: own only (else 404). Faculty: only students on their roster (else 403) ⚠ (B-07) |
 | PATCH | /api/students/{id} | 🔒 | registrar, admin | ✔ | `student_number` and `user_id` immutable after create ⚠ |
-| GET | /api/students/{id}/academic-record | 🔒 | registrar, admin, student | — | Student: own only |
+| GET | /api/students/{id}/academic-record | 🔒 | registrar, admin, student | — | Student: own only, while holding `student` (else 404, same as missing). Faculty: 403 |
+| GET | /api/students/me/academic-record | 🔒 | student | — | Own record; 404 if no profile |
+| GET | /api/programs | 🔒 | any | — | Read-only program catalog `{code, name, max_year_level}` |
 
 Student (API shape): `{ id, student_number, user_id, first_name, last_name, middle_name?, email?, program_code, year_level (1–6), academic_status: "regular"|"irregular"|"on_leave"|"graduated"|"withdrawn", admission_year }`
-Academic record: `{ student_id, program_code, program_name, year_level, academic_status, current_term_id? }`. No grades or enrollment copies.
+Academic record (T-11a, implemented; supersedes the earlier sketch): `{ student{id, student_number, full_name, program_code, program_name, year_level, academic_status, admission_year}, history{entries[{seq, at, field, from, to, actor_id (staff only)}], pagination{page, per_page, total}}, enrollment_summary, grades_summary }`. History is paginated (`?page=`, `?per_page=` ≤ 100) and has no cap (owner decision D4). The summaries are `{available:false}` until Teams 4 and 5 provide sources. No grades or enrollment copies.
 
 ### Team 4 — Enrollment & Scheduling
 
