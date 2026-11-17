@@ -145,13 +145,34 @@ Admin-only (`admin` role, CSRF on writes). Bodies are JSON; unknown fields → 4
 | GET | `/api/admin/users/{id}` | | 404 if missing |
 | PATCH | `/api/admin/users/{id}` | `{email?,roles?}` | `roles` is the full new set: assign or remove roles by sending it |
 | PATCH | `/api/admin/users/{id}/status` | `{status}` | `active` or `inactive` |
-| POST | `/api/admin/users/{id}/reset-password` | `{password,current_password}` | Re-confirms the admin (rate-limited); signs the target out everywhere |
+| POST | `/api/admin/users/{id}/reset-password` | `{password,current_password}` | Non-admin targets only. Re-confirms the admin (rate-limited); signs the target out everywhere |
 
 Rules: passwords 12–72 bytes; roles are a non-empty list of known roles.
 Administrators cannot change their own roles, status or password here (409),
 so nobody can lock themselves out or self-escalate. The last active
 administrator can never be deactivated or lose `admin` (409). Responses never
 contain password hashes.
+
+Resetting the password of any account holding `admin` (active or inactive,
+including multi-role accounts) is refused with 409 `Administrator passwords
+cannot be reset through this endpoint.` and audited as `denied`/`target_is_admin`.
+This prevents one administrator taking over another. **Open need:** a secure
+account-recovery process for administrators who lose their password (e.g. an
+offline, owner-run procedure or two-person approval). Until one is approved,
+recovering an admin account requires direct development-time intervention on the
+mock store.
+
+**Known gap (Low):** an admin can still reach the same result in three steps:
+demote another admin (allowed while another active admin remains), reset that
+now non-admin password, then grant `admin` again. Each step needs the acting
+admin's session, the reset needs their password, and all three are audited in
+order for the same `target_id` (`user.updated` removing admin →
+`user.password_reset` → `user.updated` adding admin), so it is detectable but not
+prevented. The admin account-recovery design should close it.
+
+The last-administrator guarantee above applies to the current file-backed mock
+storage only. The MariaDB integration (T-40) must implement and test equivalent
+transactional locking. Until then `APP_REPOSITORY=mysql` is refused at startup.
 
 Each successful change and its audit entry are written in one exclusive
 transaction on the same file, so both are saved or neither is. Audit entries

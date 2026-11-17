@@ -130,3 +130,23 @@ test('Admin HTTP: demotion, deactivation and password reset take effect on the t
         $server->close();
     }
 });
+
+test('Admin HTTP: admin-to-admin password reset is refused with a safe 409 and leaves the target session alive', function (): void {
+    $server = adminServer();
+    try {
+        same(200, $server->login('admin2@example.test')['status']);
+        $targetCookie = $server->cookie();
+        $server->setCookie('');
+        $token = $server->login('admin@example.test')['json']['data']['csrf_token'];
+        $response = $server->request('POST', '/api/admin/users/2/reset-password',
+            ['password' => 'Takeover-passphrase-1', 'current_password' => 'Synthetic-test-pass-42'], $token);
+        same(409, $response['status']);
+        same('{"success":false,"message":"Administrator passwords cannot be reset through this endpoint.","errors":{}}', $response['body']);
+        $server->setCookie($targetCookie);
+        same(200, $server->request('GET', '/api/auth/me')['status']);
+        $server->setCookie('');
+        same(401, $server->request('POST', '/api/auth/login', ['email' => 'admin2@example.test', 'password' => 'Takeover-passphrase-1'], $server->csrf())['status']);
+    } finally {
+        $server->close();
+    }
+});

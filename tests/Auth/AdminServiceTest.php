@@ -182,7 +182,10 @@ test('Admin operations reject non-admins (403) and inactive or stale actors (401
 test('Admin whose password was reset after the guard check cannot complete the request (auth_version re-check)', function (): void {
     adminCase(function (string $directory, $service, $repository): void {
         $inFlight = $repository->findById(2);
-        $service->resetPassword($repository->findById(1), 2, ['password' => 'New-passphrase-123', 'current_password' => 'Synthetic-test-pass-42'], '192.0.2.1');
+        // Admin-to-admin resets are blocked by the API, so simulate the password change at the repository
+        // (as a future account-recovery process would do).
+        $repository->transaction(static fn (UserTransactionInterface $tx) => $tx->update(2, ['password_hash' => App\Auth\Services\AuthService::hashPassword('Recovered-passphrase-1')]));
+        same(2, $repository->findById(2)->authVersion);
         same(401, throws(HttpException::class, fn () => $service->changeStatus($inFlight, 3, ['status' => 'inactive']))->status);
         same('active', $repository->findById(3)->status);
     });
@@ -293,5 +296,30 @@ test('Admin list searches by email with bounded pagination', function (): void {
         }
         same(404, throws(HttpException::class, fn () => $service->get($admin, 99))->status);
         same('student@example.test', $service->get($admin, 3)['email']);
+    });
+});
+
+test('Admin cannot reset another administrator password (active or inactive); non-admin resets still work', function (): void {
+    adminCase(function (string $directory, $service, $repository): void {
+        $admin = $repository->findById(1);
+        $confirm = ['password' => 'New-passphrase-123', 'current_password' => 'Synthetic-test-pass-42'];
+        foreach ([2, 5] as $adminTarget) {
+            $error = throws(HttpException::class, fn () => $service->resetPassword($admin, $adminTarget, $confirm, '192.0.2.1'));
+            same([409, App\Auth\Services\UserService::ADMIN_TARGET_MESSAGE, []], [$error->status, $error->getMessage(), $error->errors]);
+            $target = $repository->findById($adminTarget);
+            same(1, $target->authVersion);
+            check($target->verifyPassword('Synthetic-test-pass-42'), 'Admin password must be unchanged.');
+        }
+        // A multi-role account holding admin is still an administrator.
+        $service->update($admin, 4, ['roles' => ['faculty', 'admin']]);
+        same(409, throws(HttpException::class, fn () => $service->resetPassword($admin, 4, $confirm, '192.0.2.1'))->status);
+        // Re-confirmation still applies first: a wrong password is a confirmation failure, not a target error.
+        same(403, throws(HttpException::class, fn () => $service->resetPassword($admin, 2,
+            ['password' => 'New-passphrase-123', 'current_password' => 'wrong'], '192.0.2.1'))->status);
+        $service->resetPassword($admin, 3, $confirm, '192.0.2.1');
+        same(2, $repository->findById(3)->authVersion);
+        same(['user.password_reset:denied:target_is_admin', 'user.password_reset:denied:target_is_admin',
+            'user.updated:success', 'user.password_reset:denied:target_is_admin',
+            'user.password_reset:denied:confirmation_failed', 'user.password_reset:success'], auditSummary($repository));
     });
 });

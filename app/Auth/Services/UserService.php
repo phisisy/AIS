@@ -17,6 +17,7 @@ use Closure;
 final class UserService
 {
     private const ADMIN_ROLES = ['admin'];
+    public const ADMIN_TARGET_MESSAGE = 'Administrator passwords cannot be reset through this endpoint.';
     private Closure $clock;
 
     public function __construct(
@@ -184,6 +185,11 @@ final class UserService
             if ($target->id === $actor->id) {
                 throw new HttpException(409, 'Administrators cannot reset their own password here.');
             }
+            // Owner decision 2026-11-17: no admin-to-admin resets via this API (takeover risk).
+            // Administrator accounts need a separate, secure account-recovery process (not yet built).
+            if (in_array('admin', $target->roles, true)) {
+                throw new HttpException(409, self::ADMIN_TARGET_MESSAGE);
+            }
             $after = $tx->update($id, ['password_hash' => $hash]);
             $tx->appendAudit($actor->id, $id, 'user.password_reset', ['signed_out_everywhere' => true], $this->now());
             return $after->toPublicArray();
@@ -232,6 +238,7 @@ final class UserService
             $exception->status === 404 => 'target_not_found',
             $exception->status === 409 && $exception->getMessage() === UserAdminRepositoryInterface::LAST_ADMIN_MESSAGE => 'last_active_admin',
             $exception->status === 409 && isset($exception->errors['email']) => 'duplicate_email',
+            $exception->status === 409 && $exception->getMessage() === self::ADMIN_TARGET_MESSAGE => 'target_is_admin',
             $exception->status === 409 => 'self_change_not_allowed',
             $exception->status === 429 => 'rate_limited',
             default => null,
