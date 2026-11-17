@@ -16,7 +16,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-03 | 2 | User administration + audit logging | T-02 ✔ | VERIFIED (merged `8451cd4`) |
 | T-04 | 2 | Security-event logging for refused admin-route access | T-03 ✔ | VERIFIED (merged `c280aa7`) |
 | T-05 | 2 | Read-only audit-log endpoint | T-03 ✔ | PROPOSED (planning approved; not to be built yet) |
-| T-10 | 3 | Student profiles | T-02 ✔, B-07 ✔ | APPROVED (contract: `API_CONTRACT_T10_STUDENTS.md`) |
+| T-10 | 3 | Student profiles | T-02 ✔, B-07 ✔ | VERIFIED (on `task/T-10-student-records`, not merged; see `T10_IMPLEMENTATION_REPORT.md`) |
 | T-11 | 3 | Academic records + StudentDirectory | T-10, B-07 | PROPOSED |
 | T-20 | 4 | Terms & sections catalog | T-02 | PROPOSED |
 | T-21 | 4 | SectionDirectory + InstructorLookup interface | T-20, B-04 | PROPOSED |
