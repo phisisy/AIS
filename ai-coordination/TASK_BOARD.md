@@ -16,8 +16,9 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-03 | 2 | User administration + audit logging | T-02 ✔ | VERIFIED (merged `8451cd4`) |
 | T-04 | 2 | Security-event logging for refused admin-route access | T-03 ✔ | VERIFIED (merged `c280aa7`) |
 | T-05 | 2 | Read-only audit-log endpoint | T-03 ✔ | PROPOSED (planning approved; not to be built yet) |
-| T-10 | 3 | Student profiles | T-02 ✔, B-07 ✔ | VERIFIED (on `task/T-10-student-records`, not merged; see `T10_IMPLEMENTATION_REPORT.md`) |
-| T-11 | 3 | Academic records + StudentDirectory | T-10, B-07 | PROPOSED |
+| T-10 | 3 | Student profiles | T-02 ✔, B-07 ✔ | VERIFIED (merged `07b4c83`; see `T10_IMPLEMENTATION_REPORT.md`) |
+| T-11 | 3 | Academic records + StudentDirectory | T-10 ✔ | PROPOSED (planning: `PROPOSAL_T11_ACADEMIC_RECORDS.md`; scope awaits owner approval) |
+| T-06 | 2 | Protected admin registry + owner-only recovery CLI | T-03 ✔ | PROPOSED (design conditionally approved; `PROPOSAL_ADMIN_PROTECTION_RECOVERY.md` v2; implementation not approved) |
 | T-20 | 4 | Terms & sections catalog | T-02 | PROPOSED |
 | T-21 | 4 | SectionDirectory + InstructorLookup interface | T-20, B-04 | PROPOSED |
 | T-22 | 4 | Enrollment requests, approval & schedule | T-11, T-21 | PROPOSED |
@@ -125,7 +126,8 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
   4. Student: `/me` returns own profile, `/{id}` of another student → 404 (no ID probing).
   5. Faculty access per B-07 (until T-30 exists, faculty → 403).
 - **Required tests:** CRUD happy paths, validation (year level 1–6, status enum, required names), duplicates, ownership (student A reads B → 404), role matrix.
-- **Status:** PROPOSED
+- **Superseded by:** `API_CONTRACT_T10_STUDENTS.md` (owner decisions 2026-11-17). Faculty receive **404** (not 403) for anything not visible, and access is deny-all until T-31. Year level is limited by the program maximum. Owner decision 3 adds profile retention.
+- **Status:** VERIFIED. **Merged into `main` as `07b4c83`** after the owner's 8 pre-merge checks; 112/112 tests on `main`. See `T10_IMPLEMENTATION_REPORT.md`.
 
 ### T-11 — Academic records + StudentDirectory
 - **Team:** 3

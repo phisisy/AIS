@@ -80,3 +80,66 @@ The equivalent needs either a persistent column (`users.admin_protected` / `prot
 
 ## 5. Scope and files (when approved)
 `app/Auth/Repositories/MockUserTransaction.php`, `MockUserRepository.php`, `UserTransactionInterface.php`, `app/Auth/Services/UserService.php`, new `bin/recover-account.php` and `bin/setup-owner-recovery-key.php`, `database/seeders/dev_users.php`, `tests/Auth/*`, `README.md`. No Team 6 schema change.
+
+---
+
+# v2 — Finalized security design (owner decision 2, 2026-11-17)
+
+Status: **design finalized for approval; implementation NOT approved.** Proposed task id: **T-06**. Where v2 differs from sections 1–5, v2 wins.
+
+## A. Requirement → mechanism
+
+| # | Owner requirement | Mechanism | Verified by (planned test) |
+|---|---|---|---|
+| 1 | Protected status is persistent | `admin_registry.ids` in `auth/users.json`, under the runtime path (`C:/ais-runtime` by default, outside the repo and OneDrive) | Survives restart and re-read |
+| 2 | Admin grants update the registry atomically | `MockUserTransaction::insert/update` adds the id in the **same** transaction that writes the grant and its audit entry | Grant + injected write failure leaves user, registry and audit all unchanged |
+| 3 | Demotion doesn't clear it | No method removes ids; `update()` never touches existing ids | Demote, then the id is still present |
+| 4 | Deactivation doesn't clear it | Same | Deactivate, then still present |
+| 5 | Ordinary APIs can't modify it | No route, controller or service method writes it; field allowlists unchanged; the commit-time check (C) rejects any removal | A changed registry (removal) is refused at commit (500); a test greps that routes never reference it |
+| 6 | Corruption fails closed for protected operations | Malformed registry gives a generic 500 for every admin mutation, password reset and recovery. Login, `me` and reads keep working | Corrupt registry: mutations 500, store byte-identical, login still OK |
+| 7 | Keys securely generated | `random_bytes(32)`, shown once as 64 hex characters | Length, charset, uniqueness across runs |
+| 8 | Keys never in the repository or OneDrive | Only a **bcrypt hash** of the key is stored, at `<runtime>/auth/owner-recovery.hash`. Setup **refuses** if the resolved runtime path is inside the project directory or inside any OneDrive root (`OneDrive`, `OneDriveConsumer`, `OneDriveCommercial` environment variables). The plaintext key is printed once and never written to disk | Setup refused for in-project and OneDrive paths; the hash file contains no plaintext; `git ls-files` has no key or hash |
+| 9 | Explicit local authorization | CLI only (`PHP_SAPI === 'cli'`); hidden interactive key entry (never argv or env); the target email must be retyped; `APP_ENV` must be development or testing | Web SAPI refused; key via argv refused; wrong confirmation aborts with no write |
+| 10 | Recovery is audited | `user.password_recovered` (and `user.reactivated_by_recovery`) with `actor_id: 0`, `outcome: success`, in the same transaction as the change; refusals get best-effort `denied` entries with reason codes. No secrets (existing allowlist plus filter) | Audit content; secret scan |
+| 11 | Recovery ends existing sessions | Password change bumps `auth_version` (existing T-01 mechanism) | The target's open session gets 401 afterwards |
+| 12 | Last-admin safeguard stays enforced | Recovery never removes roles or deactivates. `--reactivate` can only **add** an active admin. The commit-time invariant still runs | Invariant test passes; recovery cannot be used to deactivate |
+| 13 | No public recovery endpoint | Nothing in `routes/`; the scripts live in `bin/` outside `public/`; both `.htaccess` files route only to `public/index.php`; the guard-coverage test lists every route | Route list unchanged; HTTP probes of `/bin/...` return 404 |
+
+## B. Registry details (supersedes 1.1)
+
+- Shape: `"admin_registry": {"version": 1, "ids": [..]}`, sorted, unique, positive ints.
+- **Initialization:** when the key is missing on first use, it's built from the current admins plus audit history inside the first transaction. This happens **once**, and is itself audited (`registry.initialized`, `actor_id: 0`).
+- **Commit-time check** (in `MockUserRepository::transaction`, beside the last-admin invariant):
+  1. The registry after commit must contain the registry from before commit (nothing removed).
+  2. Every row holding `admin` after commit must be in the registry.
+
+  A violation throws and nothing is written.
+- **Reset rule:** `doResetPassword` refuses any target in the registry, or currently holding admin (409, `target_is_admin_protected`), read under the lock.
+
+## C. Recovery key lifecycle
+
+1. **Setup** (`bin/setup-owner-recovery-key.php`): refuses if a hash already exists, or if the runtime path fails rule A8. Prints the key once, with instructions to store it offline (password manager or paper), not in OneDrive. Writes only the hash, with mode 0600 (Windows: inherits the runtime folder's ACL; documented).
+2. **Use** (`bin/recover-account.php`): 3 key attempts per run; each failure is audited as `denied`/`bad_recovery_key`; there's a 1-second delay between attempts.
+3. **Rotation:** the owner deletes the hash file deliberately (documented manual step) and re-runs setup. That deletion is the "I am the owner" act: it needs the same local access.
+
+## D. Threat model (stated honestly)
+
+- **Protects against:**
+  - an administrator taking over another administrator's account through the API (direct or demote-reset-promote)
+  - recovery being reachable over the network
+  - a stolen web session being used for recovery
+  - accidental lockout of the last administrator
+- **Does not protect against:** an attacker with local shell access as the owner's OS user. Such an attacker can already edit the mock JSON store directly. The key adds a deliberate, audited step, but isn't a boundary against a fully compromised host. Production needs OS-level separation and a real recovery procedure (out of scope; production remains blocked).
+
+## E. Failure scenarios added in v2
+
+| Scenario | Behaviour |
+|---|---|
+| Runtime path inside the repo or OneDrive at setup | Setup refuses; nothing written |
+| Hash file present but unreadable or malformed | Recovery refuses (fail closed); the owner must rotate deliberately |
+| Registry initialization fails mid-way | One transaction: nothing written; retried on the next operation |
+| Clock or audit failure during recovery | Transaction aborts; password, `auth_version` and audit unchanged |
+
+## F. Scope when approved (T-06)
+
+`app/Auth/Repositories/{MockUserTransaction,MockUserRepository,UserTransactionInterface}.php`, `app/Auth/Services/UserService.php`, `bin/setup-owner-recovery-key.php`, `bin/recover-account.php`, `database/seeders/dev_users.php`, `tests/Auth/*` (including CLI tests through `proc_open` with piped input), `README.md`. No Team 6 schema change; MySQL stays fail-closed.
