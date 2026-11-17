@@ -4,7 +4,68 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
-## T-20 — Terms & Sections → AGY review (prepared by Claude, 2026-11-17)
+## T-20 — Terms & Sections, after policy alignment → AGY review (prepared by Claude, 2026-11-17) — CURRENT
+
+- **Status:** READY_FOR_AGY_REVIEW. This replaces the `909a000` handoff below.
+- **Branch:** `task/T-20-terms-sections`
+- **Commits to review:**
+  - `b04fec4`: the original implementation.
+  - `909a000`: hash record.
+  - **`0624eb7`: policy alignment (delivery_mode), the QA-found bug fix, decision records and the coordination files.**
+  - The final handoff/status commit, which comes after `0624eb7`, changes Markdown only.
+  - Diff base: `main` `592d912`. **Review range: `592d912..task/T-20-terms-sections`.** Pay particular attention to `909a000..0624eb7`.
+- **Owner decisions applied:** Q1–Q7 (see `T20_IMPLEMENTATION_REPORT.md` §11 and plan §14–§16).
+
+### Verified by Claude at `0624eb7` (2026-11-17)
+
+| Check | Result |
+|---|---|
+| `php tests/run.php` | 163 passed, 0 failed |
+| `php -l`, every PHP file | 104 files, 0 failures |
+| `php tests/Core/apache_check.php` (XAMPP) | PASS, public and repository document roots |
+| QA mutation checks for the new rules | all killed |
+
+### What changed since `909a000`
+
+- **New section field `delivery_mode`:** one of `scheduled` (the default), `tba` or `online_async`. Optional on create; PATCH can change it.
+- **Meetings:**
+  - `scheduled` needs 1–14 meetings.
+  - `tba` and `online_async` may have 0–14.
+  - An empty list is never treated as TBA (422).
+  - The overlap check is unchanged.
+- **PATCH:** the mode/meetings rule is checked on the merged row inside the lock (`SectionService::update`, the `$check` closure).
+- **Stored rows:** `Section::fromArray` now requires a valid `delivery_mode` and at least one meeting for `scheduled` rows. A store without the field fails closed (generic 500).
+- **Bug fix:** on create, a per-item meeting error no longer adds a misleading "needs a meeting" error.
+- **Tests:** about 6 new or extended tests: service, HTTP over real sessions, and 6 new corrupt-store cases.
+- **Decisions recorded:** future archival requirements (plan §15), the impact on T-21 and T-22 (plan §16), and the 5-instructor cap for T-21.
+- **New files:** the coordination files `AGENT_*.md` and `AGY_REVIEW_REPORT.md`.
+
+### Security-sensitive areas (delta)
+
+1. **Mass assignment:** `delivery_mode` was added to the controller, service and repository allowlists. Check that nothing else was widened.
+2. **Merged-row check:** it must run inside the store lock. A rejected PATCH must leave the file byte-identical.
+3. **Strict validation:** `delivery_mode` must accept only the three exact strings. Check that `null`, `"TBA"`, arrays and other values are refused.
+4. **Fail-closed rows:** `Section::fromArray` and `snapshot()` must still refuse invalid stored rows.
+5. Everything listed in the earlier handoff below still applies.
+
+### Known limitations (delta)
+
+- Claude's own security-reviewer was **not** re-run for this change. AGY's review is the security review for it.
+- Two older tests were loosened while the bug was open. The new regression test asserts the exact behaviour.
+- The earlier limitations still apply: L-3, I-3, D1, store performance, and mutation M4.
+
+### Review request for AGY
+
+1. Read-only review of `592d912..task/T-20-terms-sections`, focusing on `909a000..0624eb7`. Check it against the plan (§3.2, P9, §14–§16) and `API_CONTRACTS.md`.
+2. Independently run `php tests/run.php`, `php -l` and `php tests/Core/apache_check.php`.
+   - Preferably do this in a separate worktree or clone at the branch head, because the test runs write runtime files.
+   - Don't run the seeder against the shared `runtime/`.
+3. Check for regressions in T-00 to T-11a.
+4. Write the report to `ai-coordination/AGY_REVIEW_REPORT.md`, including the exact commit reviewed and a verdict.
+
+---
+
+## T-20 — Terms & Sections → AGY review (prepared by Claude, 2026-11-17) — SUPERSEDED by the handoff above
 
 - **Status:** READY_FOR_AGY_REVIEW
 - **Branch:** `task/T-20-terms-sections`

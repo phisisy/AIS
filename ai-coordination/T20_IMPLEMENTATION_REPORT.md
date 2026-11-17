@@ -171,7 +171,9 @@ Full detail is in plan §9, `ARCHITECTURE.md` §4.1, `API_CONTRACTS.md` §2–§
 
 ## 10. Commits
 
-- Implementation commit: `b04fec4` on `task/T-20-terms-sections`. This follow-up records the hash. Not merged, not pushed.
+- Implementation commit: `b04fec4` on `task/T-20-terms-sections`. The follow-up `909a000` records the hash.
+- Policy alignment commit: `0624eb7` (delivery_mode, bug fix, decision records, coordination files).
+- Not merged, not pushed.
 
 ## 11. Policy alignment (owner decisions, 2026-11-17)
 

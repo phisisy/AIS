@@ -8,7 +8,7 @@ The scope and approval of each task are kept in `TASK_BOARD.md`. This file recor
 - **Task name:** Terms & sections catalog
 - **Owner:** CLAUDE (lead). Phase 1 backend was done by CODEX, tests by Claude's qa-engineer, the seeder by database-engineer.
 - **Reviewer:** AGY (independent). Claude's security-reviewer has already done a read-only review.
-- **Branch:** `task/T-20-terms-sections`. Commits `b04fec4` (implementation) and `909a000` (records the hash), from `main` `592d912`.
+- **Branch:** `task/T-20-terms-sections`. Commits `b04fec4` (implementation), `909a000` (hash record), `0624eb7` (policy alignment: delivery_mode), plus a docs-only handoff commit. Base: `main` `592d912`.
 - **Assigned files (locked to T-20; no other agent edits these until T-20 is merged or released):**
   - `app/Enrollment/**`
   - `routes/enrollment.php`
@@ -18,9 +18,9 @@ The scope and approval of each task are kept in `TASK_BOARD.md`. This file recor
   - `docs/plans/T-20-terms-sections.md`
   - `README.md` (Enrollment section)
   - `ai-coordination/T20_IMPLEMENTATION_REPORT.md`
-- **Status:** READY_FOR_AGY_REVIEW. A policy decision is pending: Q3 (TBA/online sections) is not implemented, see `AGENT_HANDOFF.md`.
+- **Status:** READY_FOR_AGY_REVIEW (owner decisions Q1–Q7 applied; see the current handoff in `AGENT_HANDOFF.md`).
 - **Dependencies:** T-02 ✔, B-04 ✔ (resolved by the owner)
-- **Approval status:** implementation APPROVED (owner, 2026-11-17). Merge NOT approved.
+- **Approval status:** implementation APPROVED; conditionally approved pending policy alignment (done) and AGY review. Merge NOT approved.
 
 ## T-11a — Academic Records (Team 3)
 
