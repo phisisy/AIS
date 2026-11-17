@@ -50,8 +50,11 @@ final class SecurityEventLog
             $this->store->transaction(static function (array &$data) use ($type, $route, $actorId, $now): void {
                 $events = array_values(array_filter(
                     is_array($data['events'] ?? null) ? $data['events'] : [],
+                    // Malformed entries (e.g. hand-edited) are dropped so they can never block logging.
                     static fn (mixed $e): bool => is_array($e) && is_int($e['ts'] ?? null) && is_int($e['last_ts'] ?? null)
-                        && is_int($e['count'] ?? null) && $e['last_ts'] > $now - self::RETENTION_SECONDS
+                        && is_int($e['count'] ?? null) && is_string($e['type'] ?? null) && is_string($e['route'] ?? null)
+                        && array_key_exists('actor_id', $e) && ($e['actor_id'] === null || is_int($e['actor_id']))
+                        && $e['last_ts'] > $now - self::RETENTION_SECONDS
                 ));
                 $merged = false;
                 for ($i = count($events) - 1; $i >= 0; $i--) {

@@ -121,6 +121,14 @@ test('SecurityEventLog never throws on broken storage and recovers from a corrup
         check(is_file($path . '.corrupt-1800000000'), 'Corrupt file must be kept aside.');
         $log->record('unauthenticated', 'GET /api/admin/users', null);
         same(1, count($log->events()));
+        // Valid JSON with malformed entries: they are dropped and logging continues.
+        $t = 1_800_000_000;
+        file_put_contents($path, json_encode(['events' => [
+            ['ts' => $t, 'last_ts' => $t, 'count' => 1],
+            ['ts' => $t, 'last_ts' => $t, 'count' => 1, 'type' => 'forbidden_role', 'route' => 'GET /api/admin/users', 'actor_id' => 'x'],
+        ]]));
+        $log->record('forbidden_role', 'GET /api/admin/users', 9);
+        same([9], array_column($log->events(), 'actor_id'));
     } finally {
         removeTestDirectory($directory);
     }
