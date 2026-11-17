@@ -7,7 +7,7 @@ Status key: **OPEN** (needs owner decision) · **DEFERRED** (accepted gap) · **
 | B-01 | Critical | No Git repository | RESOLVED 2026-11-17 | — |
 | B-02 | Critical | One app with modules vs. separate team apps | RESOLVED 2026-11-17 | — |
 | B-03 | High | Team 6 shared schema not finalized | OPEN | T-40 (MySQL repositories) |
-| B-04 | Medium | Who owns "instructor of a section" | OPEN | T-21, T-30 |
+| B-04 | Medium | Who owns "instructor of a section" | RESOLVED 2026-11-17 (Team 4) | — |
 | B-05 | Medium | Grade scale and finalization workflow | OPEN | T-32 |
 | B-06 | Medium | Login identifier: email or username | RESOLVED 2026-11-17 (email) | — |
 | B-07 | Medium | Faculty access to student profiles | RESOLVED 2026-11-17 | — |
@@ -32,7 +32,14 @@ MySQL repositories (T-40) start only when Team 6 publishes an approved schema.
 
 ## B-04 — Section instructor ownership (Medium)
 Team 4's prompt shows instructors on sections. Team 5's prompt owns teaching assignments.
-**Recommendation:** Team 5 owns teaching assignments. Team 4 displays them through `InstructorLookup` (implemented by Team 5).
+~~Recommendation: Team 5 owns teaching assignments. Team 4 displays them through `InstructorLookup` (implemented by Team 5).~~ (superseded)
+**Resolved (owner, 2026-11-17):**
+- **Team 4 owns the authoritative instructor-to-section assignment**, including the endpoint `POST`/`DELETE /api/registrar/sections/{id}/instructors`.
+- **Team 5 owns faculty profiles and grade management.** It consumes assignments through Team 4's `SectionDirectory` (`isAssigned`, `sectionIdsForFaculty`) and must not keep a conflicting authoritative assignment.
+- **Instructor ids must reference valid faculty identities.** They are checked through `FacultyIdentityLookup`, a Team 4 port implemented by Team 5. It fails closed until T-30.
+- **Authorization is server-side.** Changes are validated and audited, with one `assignment_history` entry per change in the same transaction.
+- **No duplicated faculty data and no Team 6 schema changes.**
+- **Implementation:** T-21 (expanded). T-30 implements the lookup. T-31 uses Team 4's `isAssigned`. See `ARCHITECTURE.md` §4.1 and `docs/plans/T-20-terms-sections.md` §9.
 
 ## B-05 — Grade scale and finalization (Medium)
 Not specified. **Proposed default:** 1.00–3.00 in 0.25 steps, 5.00 (fail), INC, DRP. Workflow is draft → submitted (faculty) → finalized (registrar).

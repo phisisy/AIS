@@ -67,7 +67,15 @@ Auth  ←  Students  ←  Enrollment  ←  Faculty
 
 Enrollment needs instructor names for display: it gets them through `InstructorLookup`, an
 interface **defined by Enrollment** and **implemented by Faculty**, wired in bootstrap. This keeps the
-service graph acyclic. ⚠ (B-04)
+service graph acyclic. ⚠ (B-04). Superseded by §4.1.
+
+### 4.1 B-04 decision: instructor-to-section assignment (owner, 2026-11-17)
+
+- **Team 4 (Enrollment) owns the authoritative assignment.** It holds the storage (`{section_id, faculty_id}` in the Enrollment store), the rules and the endpoint `POST`/`DELETE /api/registrar/sections/{id}/instructors`. This replaces Team 5's `POST /api/registrar/teaching-assignments`.
+- **Team 5 (Faculty) owns faculty profiles and grades.** It reads assignments only through `SectionDirectory::isAssigned` and `sectionIdsForFaculty` (Team 4). It must not keep a conflicting assignment table.
+- **Faculty ids must be valid faculty identities.** They are checked through `FacultyIdentityLookup`, a port in `app/Enrollment/Contracts/` implemented by Team 5. It replaces `InstructorLookup`, and keeps the graph acyclic. It fails closed: an unknown id, an inactive faculty member or a lookup error means the assignment is refused. No faculty data is copied; names are resolved at read time.
+- **Authorization is server-side:** guard plus service, registrar and admin only. Every successful change appends one audit entry in the same store transaction (`assignment_history`). There are no Team 6 schema changes.
+- **Implementation:** T-21, expanded. T-30 implements the lookup and consumes the directory. Details are in `docs/plans/T-20-terms-sections.md` §9.
 
 ## 5. Core conventions
 

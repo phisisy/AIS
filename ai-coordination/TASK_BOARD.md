@@ -20,10 +20,10 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-11a | 3 | Academic records + StudentDirectory | T-10 ✔ | VERIFIED (merged `d062a5e`; implementation `0b91668`; see `T11A_IMPLEMENTATION_REPORT.md`) |
 | T-11b | 3 | Course catalog, curriculum, real enrollment/grade summaries | T-11a, D1, T-22, T-32 | PROPOSED (not approved) |
 | T-06 | 2 | Protected admin registry + owner-only recovery CLI | T-03 ✔ | PROPOSED (design conditionally approved; `PROPOSAL_ADMIN_PROTECTION_RECOVERY.md` v2; implementation not approved) |
-| T-20 | 4 | Terms & sections catalog | T-02 | PROPOSED |
-| T-21 | 4 | SectionDirectory + InstructorLookup interface | T-20, B-04 | PROPOSED |
+| T-20 | 4 | Terms & sections catalog | T-02 ✔ | READY_FOR_REVIEW (APPROVED by owner 2026-11-17; committed on `task/T-20-terms-sections`, not merged; see `T20_IMPLEMENTATION_REPORT.md`) |
+| T-21 | 4 | SectionDirectory, faculty identity port, instructor assignments | T-20, B-04 ✔ | PROPOSED (scope revised for B-04; owner to confirm, plan Q7) |
 | T-22 | 4 | Enrollment requests, approval & schedule | T-11, T-21 | PROPOSED |
-| T-30 | 5 | Faculty profiles & teaching assignments | T-21, B-04 | PROPOSED |
+| T-30 | 5 | Faculty profiles + FacultyIdentityLookup | T-21, B-04 ✔ | PROPOSED (assignments moved to Team 4 by B-04) |
 | T-31 | 5 | Class rosters | T-22, T-30 | PROPOSED |
 | T-32 | 5 | Grade entry, submission, finalization | T-31, B-05 | PROPOSED |
 | T-39 | All | Cross-module integration tests | T-32 | PROPOSED |
@@ -142,21 +142,23 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 - **Status:** T-11a VERIFIED. Independent review (AGY, 2026-11-17): APPROVE, no Critical/High/Medium; L-01 is the documented file-store limitation. **Merged into `main` as `d062a5e`** with owner approval; 124/124 tests and Apache PASS on `main`. Not pushed. T-11b PROPOSED.
 
 ### T-20 — Terms & sections catalog
+- **Owner approval (2026-11-17):** APPROVED. Plan: `docs/plans/T-20-terms-sections.md` (adds registrar term create/update). No T-21/T-22 work. Commit to `task/T-20-terms-sections` only; no merge without owner approval.
+- **B-04 (owner, 2026-11-17): RESOLVED.** Team 4 owns the authoritative instructor-to-section assignment; Team 5 owns faculty profiles and grades and consumes assignments via an approved interface, keeping no conflicting assignment. Instructor ids must reference valid faculty identities; authorization server-side; changes validated and audited; no duplicated faculty data; no Team 6 schema changes. Implemented in T-21 (see revised T-21/T-30/T-31).
 - **Team:** 4
 - **Description:** Term and Section models (with meetings), repositories + mock, `/api/terms`, `/api/sections`, registrar section create/update.
 - **Files allowed to change:** `app/Enrollment/**` (excluding `Contracts/`), `routes/enrollment.php`, `app/bootstrap.php` (Enrollment wiring only), `database/seeders/dev_sections.php`, `tests/Enrollment/*`
 - **Dependencies:** T-02
 - **Acceptance criteria:** Filter by term, course or search. Remaining slots computed from approved count. Meetings validated (day enum, `start < end`, HH:MM). A section's own meetings must not overlap. Capacity ≥ 1 and not below approved count (409). Registrar/admin only for writes.
 - **Required tests:** listing/filtering, meeting validation, capacity rules, role matrix.
-- **Status:** PROPOSED
+- **Status:** READY_FOR_REVIEW (158/158 tests, 104/104 lint, Apache PASS; security review: no Critical/High/Medium, L-1 and L-2 fixed, L-3 out of scope (Core/Team 1)). Plan defaults Q1–Q7 await owner confirmation. Awaiting independent review and owner merge approval.
 
 ### T-21 — SectionDirectory + InstructorLookup interface
 - **Team:** 4
-- **Description:** Define `SectionDirectory` (implemented by Team 4) and `InstructorLookup` (interface only, with a null implementation that returns `[]` until T-30).
-- **Files allowed to change:** `app/Enrollment/Contracts/*`, `app/Enrollment/Services/SectionService.php`, `tests/Enrollment/*`
-- **Dependencies:** T-20, B-04
-- **Acceptance criteria:** Interfaces match `API_CONTRACTS.md` §3. Sections show `instructors: []` until Team 5 is wired.
-- **Required tests:** directory unit tests. Section JSON includes `instructors`.
+- **Description (revised for B-04, owner 2026-11-17; scope to be confirmed):** `SectionDirectory` (`findSection`, `approvedStudentIds`, `isAssigned`, `sectionIdsForFaculty`, `assignedFacultyIds`), the `FacultyIdentityLookup` port (implemented by Team 5 in T-30; `UnavailableFacultyIdentity` refuses every id until then), the authoritative instructor assignment endpoints `POST/DELETE /api/registrar/sections/{id}/instructors`, append-only `assignment_history` written in the same transaction, and `instructors` in section JSON. See `docs/plans/T-20-terms-sections.md` §9. Replaces the earlier `InstructorLookup` design.
+- **Files allowed to change:** `app/Enrollment/**` (including `Contracts/`), `routes/enrollment.php`, `app/bootstrap.php` (Enrollment wiring), `tests/Enrollment/*`, `README.md`
+- **Dependencies:** T-20, B-04 ✔
+- **Acceptance criteria:** Interfaces match `API_CONTRACTS.md` §3. Only registrar/admin assign (server-side). Unknown, inactive or unverifiable faculty ids → 422 (fail closed). Duplicate assignment → 409. Each successful change writes exactly one audit entry atomically; failures write none. No faculty data copied (ids only; names resolved at read time).
+- **Required tests:** directory unit tests, role matrix, fail-closed lookup, duplicate, audit atomicity, section JSON includes `instructors`.
 - **Status:** PROPOSED
 
 ### T-22 — Enrollment requests, approval & schedule
@@ -175,16 +177,16 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 
 ### T-30 — Faculty profiles & teaching assignments
 - **Team:** 5
-- **Description:** Faculty and TeachingAssignment models, repositories + mock, `/api/faculty/me`, `/api/faculty/classes`, registrar assignment endpoint, `FacultyDirectory`, and the real `InstructorLookup` implementation.
-- **Files allowed to change:** `app/Faculty/**`, `routes/faculty.php`, `app/bootstrap.php` (Faculty wiring + swap the InstructorLookup binding), `database/seeders/dev_faculty.php`, `tests/Faculty/*`
-- **Dependencies:** T-21, B-04
-- **Acceptance criteria:** Faculty sees only own profile and classes. Assignments need an existing faculty profile and section. Duplicate assignment → 409. Sections now show instructors.
-- **Required tests:** ownership, role matrix, duplicate assignment, InstructorLookup output.
+- **Description (revised for B-04):** Faculty model, repository + mock, `/api/faculty/me`, `/api/faculty/classes` (built from Team 4's `SectionDirectory::sectionIdsForFaculty`), `FacultyDirectory::findByUserId`, and the real `FacultyIdentityLookup` implementation. **No** TeachingAssignment model or assignment endpoint: Team 4 owns assignments (B-04).
+- **Files allowed to change:** `app/Faculty/**`, `routes/faculty.php`, `app/bootstrap.php` (Faculty wiring + swap the `FacultyIdentityLookup` binding), `database/seeders/dev_faculty.php`, `tests/Faculty/*`
+- **Dependencies:** T-21, B-04 ✔
+- **Acceptance criteria:** Faculty sees only own profile and classes. `FacultyIdentityLookup` reports only real, active faculty. Sections now show instructor names. Team 5 keeps no assignment data.
+- **Required tests:** ownership, role matrix, FacultyIdentityLookup output.
 - **Status:** PROPOSED
 
 ### T-31 — Class rosters
 - **Team:** 5
-- **Description:** `/api/faculty/classes/{id}/students`, built from `SectionDirectory::approvedStudentIds` and `StudentDirectory`.
+- **Description:** `/api/faculty/classes/{id}/students`, built from `SectionDirectory::approvedStudentIds` and `StudentDirectory`. The assignment check is `SectionDirectory::isAssigned` (Team 4 source, B-04); the B-07 "officially assigned" fact also comes from Team 4.
 - **Files allowed to change:** `app/Faculty/**`, `routes/faculty.php`, `tests/Faculty/*`
 - **Dependencies:** T-22, T-30
 - **Acceptance criteria:** Unassigned faculty → 403. Only approved enrollments appear. Search by name/number. Summary fields only.
