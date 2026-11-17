@@ -11,11 +11,15 @@ return static function (Router $router, array $container): void {
     $router->add('GET', '/api/auth/me', [$controller, 'me']);
 
     // T-03 user administration: admin only; the guard adds CSRF on every non-GET.
-    $admin = static fn (string $method) => $container['guard']->roles(['admin'], [$container['user_controller'], $method]);
-    $router->add('GET', '/api/admin/users', $admin('index'));
-    $router->add('POST', '/api/admin/users', $admin('create'));
-    $router->add('GET', '/api/admin/users/{id}', $admin('show'));
-    $router->add('PATCH', '/api/admin/users/{id}', $admin('update'));
-    $router->add('PATCH', '/api/admin/users/{id}/status', $admin('status'));
-    $router->add('POST', '/api/admin/users/{id}/reset-password', $admin('resetPassword'));
+    // T-04: each refusal is logged as a security event under the route's own pattern.
+    $admin = static function (string $method, string $path, string $action) use ($router, $container): void {
+        $router->add($method, $path, $container['guard']->roles(['admin'],
+            [$container['user_controller'], $action], $method . ' ' . $path));
+    };
+    $admin('GET', '/api/admin/users', 'index');
+    $admin('POST', '/api/admin/users', 'create');
+    $admin('GET', '/api/admin/users/{id}', 'show');
+    $admin('PATCH', '/api/admin/users/{id}', 'update');
+    $admin('PATCH', '/api/admin/users/{id}/status', 'status');
+    $admin('POST', '/api/admin/users/{id}/reset-password', 'resetPassword');
 };

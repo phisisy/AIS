@@ -14,7 +14,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-01 | 2 | Authentication & sessions | T-00 ✔, B-06 ✔ | VERIFIED |
 | T-02 | 2 | RBAC middleware & authorization service | T-01 ✔ | VERIFIED |
 | T-03 | 2 | User administration + audit logging | T-02 ✔ | VERIFIED (merged `8451cd4`) |
-| T-04 | 2 | Security-event logging for refused admin-route access | T-03 ✔ | PROPOSED (approved in principle; start needs owner go-ahead) |
+| T-04 | 2 | Security-event logging for refused admin-route access | T-03 ✔ | VERIFIED (on `task/T-04-security-events`, not merged) |
 | T-05 | 2 | Read-only audit-log endpoint | T-03 ✔ | PROPOSED (planning approved; not to be built yet) |
 | T-10 | 3 | Student profiles | T-02 | PROPOSED |
 | T-11 | 3 | Academic records + StudentDirectory | T-10, B-07 | PROPOSED |
@@ -104,8 +104,8 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 - **Team:** 2
 - **Description:** When the route guard refuses a request to an admin endpoint (401 anonymous, 403 wrong role, 403 CSRF), record a security event. Authentication and authorization behaviour stays unchanged.
 - **Owner requirements (decision 3):** record timestamp, route identifier (method + route pattern, not the raw URL), outcome, and a safe actor identifier when available (user id). Never record passwords, tokens, session IDs or request bodies. Bounded growth (e.g. fixed-size ring or rotation). Prevent log injection (structured JSON fields only, no raw client strings). No leakage in responses. A logging failure must never turn a refusal into an allow.
-- **Likely files:** `app/Auth/Middleware/RouteGuard.php`, a new `app/Auth/Services/SecurityEventLog.php`, `app/bootstrap.php`, `tests/Auth/SecurityEvent*`, `README.md`.
-- **Status:** PROPOSED. Do not start without explicit owner approval.
+- **Files changed:** `app/Auth/Services/SecurityEventLog.php` (new), `app/Auth/Middleware/RouteGuard.php`, `app/Core/JsonStore.php` (opt-in non-blocking transaction; default unchanged), `app/bootstrap.php`, `routes/auth.php`, `tests/Auth/SecurityEvent*Test.php`, `README.md`.
+- **Status:** VERIFIED (Claude, 2026-11-17; owner-approved; see CLAUDE_REVIEW.md). Committed on `task/T-04-security-events` only. **Not merged**; awaiting owner approval.
 
 ### T-05 — Read-only audit-log endpoint (PROPOSED, planning only)
 - **Team:** 2
