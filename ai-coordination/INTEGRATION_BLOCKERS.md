@@ -10,7 +10,7 @@ Status key: **OPEN** (needs owner decision) · **DEFERRED** (accepted gap) · **
 | B-04 | Medium | Who owns "instructor of a section" | OPEN | T-21, T-30 |
 | B-05 | Medium | Grade scale and finalization workflow | OPEN | T-32 |
 | B-06 | Medium | Login identifier: email or username | RESOLVED 2026-11-17 (email) | — |
-| B-07 | Medium | Faculty access to student profiles | OPEN | T-11 |
+| B-07 | Medium | Faculty access to student profiles | RESOLVED 2026-11-17 | — |
 | B-08 | Low | Enrollment eligibility beyond MVP rules | OPEN | T-22 |
 | B-09 | Medium | Persistent session revocation | DEFERRED | — |
 | B-10 | Low | Frontend origin (Team 1) | OPEN | Team 1 integration |
@@ -44,7 +44,7 @@ The frontend guide shows "username/password". A future shared schema may only ha
 
 ## B-07 — Faculty access to student profiles (Medium)
 Team 3 must "restrict faculty access to explicitly authorized information".
-**Recommendation:** faculty may view the summary (name, student number, program, year level) of students on their own rosters only. No other access.
+**Resolved (owner, 2026-11-17):** faculty may view only the approved summary fields (`API_CONTRACT_T10_STUDENTS.md` §7), only for students enrolled in classes officially assigned to them. If the assignment relationship is unavailable or unverified, access is denied. Non-visible records return 404, identical to a missing record. Enforced server-side; deny-all until T-31 provides a verified source.
 
 ## B-08 — Enrollment eligibility (Low)
 MVP rules are in `API_CONTRACTS.md`. Not included: prerequisites, unit limits, enrollment periods, dropping or cancelling.
