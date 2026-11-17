@@ -1,9 +1,8 @@
 # AIS backend
 
-T-00 supplies the PHP HTTP core and offline test runner. PHP 8.1+ is required
-(verified locally with XAMPP PHP 8.2.12). There are no Composer dependencies.
-Module endpoints, authentication, sessions, and repositories are future tasks.
-The only registered endpoint is `GET /`, returning:
+T-00 supplies the PHP HTTP core and offline test runner. T-01 adds email login
+and sessions (Team 2). PHP 8.1+ is required (verified locally with XAMPP PHP
+8.2.12). There are no Composer dependencies. `GET /` returns:
 
 ```json
 {"success":true,"message":"AIS API is running.","data":{}}
@@ -46,9 +45,16 @@ processing, inline comments, or `export` syntax. Duplicate/malformed entries fai
 closed. Process environment values take precedence, including empty values.
 
 - `APP_REPOSITORY`: `mock` (default) or `mysql`; other values fail closed.
-- `APP_ENV`: descriptive environment name, default `development`.
+- `APP_ENV`: `development` (default) or `testing`. Anything else, including
+  `production`, fails closed until a deployment is approved.
+- `APP_HTTPS`: `true` marks the session cookie `Secure`. Direct HTTPS does this
+  automatically; forwarded-proto headers are ignored.
 - `APP_RUNTIME_PATH`: trusted private runtime directory, default
-  `storage/runtime/`, outside the public directory and ignored by Git.
+  `storage/runtime/`, outside the public directory and ignored by Git. Holds
+  `sessions/`, `auth/users.json` and `auth/login-attempts.json`. This workspace
+  is in OneDrive: store writes retry briefly when sync or antivirus holds a file
+  open, but a runtime path outside OneDrive (e.g. `C:/ais-runtime`) avoids the
+  delay and keeps session files out of cloud sync.
 - `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`: lazy PDO
   configuration. Bootstrap opens no database connection in either mode. MySQL
   repositories and the Team 6 schema remain unimplemented; there is no fallback
@@ -63,11 +69,37 @@ place all rows that must change together in that file. Nested operations on the
 same file, including via another store instance, are unsupported. Store paths
 must be server-owned values, never request input.
 
+## Authentication (T-01)
+
+Same-origin JSON API with native PHP session cookies (`AIS_SESSION`, HttpOnly,
+SameSite=Lax). Idle timeout 30 minutes, absolute timeout 8 hours.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/auth/csrf` | Returns `data.csrf_token`; starts an anonymous session |
+| POST | `/api/auth/login` | `{email,password}` + `X-CSRF-Token`. Rotates the session ID and CSRF token; returns `data.user` and the new `data.csrf_token` |
+| GET | `/api/auth/me` | Current user `{id,email,roles,status}`, reloaded every request |
+| POST | `/api/auth/logout` | Requires sign-in + `X-CSRF-Token` |
+
+Every credential failure (unknown email, wrong password, inactive account, wrong
+types) returns the same 401 `Invalid email or password.`. Login is limited to 5
+attempts per IP+email and 30 per IP per 15 minutes (429 with `Retry-After`);
+successful attempts count. A user who is deactivated, deleted, or whose
+`auth_version` changes is signed out on their next request.
+
+Create fictional development accounts (random passwords printed once; refuses to
+overwrite an existing store):
+
+```powershell
+& 'C:\xampp\php\php.exe' database/seeders/dev_users.php
+```
+
 ## Core interfaces
 
 - `app/bootstrap.php` returns an explicit array container with `config`,
   `database_config`, and `router`; module route files return registration closures
-  receiving `(Router $router, array $container)` and currently register nothing.
+  receiving `(Router $router, array $container)`. The container also holds
+  `session`, `users`, `auth` and `auth_controller`.
 - `Router::add($method, $path, $handler)` registers a handler receiving
   `(Request $request, array $params)` and returning `Response`. Full-segment
   `{name}` parameters accept canonical positive decimal integers within PHP's

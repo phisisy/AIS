@@ -9,6 +9,9 @@ use RuntimeException;
 /** Development-only storage. Use one store for every row in a transaction. */
 final class JsonStore
 {
+    /** About 1.1 s of total back-off before giving up. */
+    private const REPLACE_ATTEMPTS = 10;
+
     private bool $busy = false;
 
     public function __construct(private string $path)
@@ -99,13 +102,23 @@ final class JsonStore
         if ($temporary === false) {
             throw new RuntimeException('Unable to create store temporary file.');
         }
+        // tempnam() silently falls back to the system temp dir; never stage data outside the store dir.
+        if (realpath(dirname($temporary)) !== realpath(dirname($this->path))) {
+            @unlink($temporary);
+            throw new RuntimeException('Unable to create store temporary file.');
+        }
         try {
             $written = @file_put_contents($temporary, $contents);
             if ($written !== strlen($contents)) {
                 throw new RuntimeException('Unable to write store.');
             }
-            if (!@rename($temporary, $this->path)) {
-                throw new RuntimeException('Unable to replace store.');
+            // Windows refuses to replace a file another process has open (OneDrive sync,
+            // antivirus). Retry briefly; on final failure the original file is untouched.
+            for ($attempt = 1; !@rename($temporary, $this->path); $attempt++) {
+                if ($attempt >= self::REPLACE_ATTEMPTS) {
+                    throw new RuntimeException('Unable to replace store.');
+                }
+                usleep(20000 * $attempt);
             }
         } finally {
             if (is_file($temporary)) {

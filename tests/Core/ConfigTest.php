@@ -75,3 +75,24 @@ test('PDO factory rejects unsafe DSN settings without connecting or leaking secr
         same(null, $error->getPrevious());
     }
 });
+
+test('Application environment allows development and testing only, defaulting to development', function (): void {
+    $previous = getenv('APP_ENV');
+    try {
+        putenv('APP_ENV');
+        same('development', (require dirname(__DIR__, 2) . '/config/app.php')['environment']);
+        foreach (['development', 'testing'] as $environment) {
+            putenv('APP_ENV=' . $environment);
+            same($environment, (require dirname(__DIR__, 2) . '/config/app.php')['environment']);
+        }
+        foreach (['production', 'prod', 'Development', '', 'test'] as $environment) {
+            putenv('APP_ENV=' . $environment);
+            $error = throws(RuntimeException::class, function (): void {
+                require dirname(__DIR__, 2) . '/config/app.php';
+            });
+            same('Invalid application environment.', $error->getMessage());
+        }
+    } finally {
+        putenv($previous === false ? 'APP_ENV' : 'APP_ENV=' . $previous);
+    }
+});

@@ -47,3 +47,25 @@ PDO: exception mode, native prepares, utf8mb4, multi-statements off, and a crede
 
 ### Outcome
 **VERIFIED.** Committed on `task/T-00-core` by Claude per the Git workflow. Merge to `main` is the owner's decision.
+
+## T-01 — Authentication & sessions — **VERIFIED** (2026-11-17)
+
+Implemented by Claude under the owner-approved takeover. The independent check is a read-only `security-reviewer` subagent plus Claude's own test, lint, Apache and live-HTTP runs (see CODEX_REPORT T-01).
+
+| # | Criterion | Verdict | Evidence |
+|---|---|---|---|
+| 1 | csrf / login / logout / me per contract | Met | AuthHttpTest flow test; live probe |
+| 2 | Same 401 for every credential failure; dummy hash | Met | 9 service cases + 7 HTTP cases, identical bodies |
+| 3 | Session ID regenerated; HttpOnly/SameSite/strict; 30 min / 8 h timeouts | Met | HTTP test (cookie changes, flags); `session_clock` worker test |
+| 4 | Reload per request; inactive/deleted/changed `auth_version` rejected | Met | Service and HTTP revocation tests |
+| 5 | 5 per IP+email, 30 per IP per 15 min, 429 + Retry-After | Met | HTTP pair test (ignores X-Forwarded-For); unit IP test |
+| 6 | No hash, session ID or auth_version in responses | Met | HTTP test scans bodies |
+| 7 | `APP_ENV` validated; OneDrive-safe store writes | Met | Config test; 2 retry tests plus a mutation check |
+
+Security review: no Critical, High or Medium findings.
+- **L1 fixed:** the dummy hash could diverge from `PASSWORD_DEFAULT` on PHP 8.4+ (timing enumeration). Bcrypt cost 10 is now pinned in `AuthService::HASH_*`, the seeder uses `hashPassword()`, and a parity test guards it.
+- **L2 fixed:** a `tempnam()` fallback to the system temp dir could stage store data outside the store directory. Now refused.
+- **L3 open (owner decision):** the default `storage/runtime` is inside OneDrive, so session files and password hashes sync to the cloud. Documented in README/.env.example with a recommended `APP_RUNTIME_PATH=C:/ais-runtime`.
+- **Info, for deployment (production still blocked):** per-IP limit by full IPv6 address and behind proxies; `__Host-` cookie prefix once TLS is mandatory.
+
+Caveat: the implementer and the main reviewer are the same model. The subagent review and executable tests are the independent evidence.

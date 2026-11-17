@@ -115,3 +115,66 @@ test('JsonStore serializes concurrent process updates without lost writes', func
         removeTestDirectory($directory);
     }
 });
+
+/** Starts a process that keeps $path open (blocking replacement on Windows) for $milliseconds. */
+function holdFileOpen(string $path, int $milliseconds, string $readyFlag): mixed
+{
+    $code = '$h = fopen($argv[1], "rb"); file_put_contents($argv[2], "1"); usleep((int) $argv[3] * 1000); fclose($h);';
+    $process = proc_open([PHP_BINARY, '-r', $code, $path, $readyFlag, (string) $milliseconds],
+        [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, null, ['bypass_shell' => true]);
+    check(is_resource($process), 'Cannot start file holder.');
+    $deadline = microtime(true) + 5;
+    while (!is_file($readyFlag)) {
+        check(microtime(true) < $deadline, 'File holder did not start.');
+        usleep(5000);
+    }
+    return $process;
+}
+
+test('JsonStore retries a replacement blocked by another process and then commits', function (): void {
+    if (PHP_OS_FAMILY !== 'Windows') {
+        return; // Only Windows refuses to replace an open file.
+    }
+    $directory = tempDirectory();
+    $holder = null;
+    try {
+        $store = new JsonStore($directory . '/state.json');
+        $store->transaction(function (array &$data): void { $data['count'] = 1; });
+        $holder = holdFileOpen($directory . '/state.json', 150, $directory . '/ready');
+        $store->transaction(function (array &$data): void { $data['count'] = 2; });
+        same(['count' => 2], $store->read());
+    } finally {
+        if (is_resource($holder)) {
+            proc_close($holder);
+        }
+        removeTestDirectory($directory);
+    }
+});
+
+test('JsonStore gives up after bounded retries and keeps the original data', function (): void {
+    if (PHP_OS_FAMILY !== 'Windows') {
+        return;
+    }
+    $directory = tempDirectory();
+    $holder = null;
+    try {
+        $store = new JsonStore($directory . '/state.json');
+        $store->transaction(function (array &$data): void { $data['count'] = 1; });
+        $holder = holdFileOpen($directory . '/state.json', 4000, $directory . '/ready');
+        $started = microtime(true);
+        $error = throws(RuntimeException::class, function () use ($store): void {
+            $store->transaction(function (array &$data): void { $data['count'] = 2; });
+        });
+        same('Unable to replace store.', $error->getMessage());
+        check(microtime(true) - $started < 3, 'Retry must be bounded.');
+        proc_close($holder);
+        $holder = null;
+        same(['count' => 1], $store->read());
+        same([], glob($directory . '/.ais-store-*'));
+    } finally {
+        if (is_resource($holder)) {
+            proc_close($holder);
+        }
+        removeTestDirectory($directory);
+    }
+});

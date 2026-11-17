@@ -51,6 +51,18 @@ No frameworks (no Laravel/Symfony/Slim). No Composer dependencies unless explici
 | Claude | Architecture, specs, contracts, task board, reviews (`CLAUDE_REVIEW.md`), progress reports. Does **not** edit application source. |
 | Codex | Implements `APPROVED` tasks only, within each task's "Files allowed to change", reports in `CODEX_REPORT.md` |
 
+### Takeover (owner-approved 2026-11-17)
+
+Codex reached its usage limit partway through T-01. **Claude is now the primary implementation engineer** for Teams 2–5:
+
+- The owner still approves each task (`PROPOSED → APPROVED`) and each merge to `main`.
+- Claude implements on the task branch within the task's allowed files and preserves all existing work, including Codex's partial T-01 files.
+- Independent check before `VERIFIED`: the full test suite, a syntax check, a manual HTTP probe, and a review by the read-only `security-reviewer` subagent (`.claude/agents/security-reviewer.md`). Results go in `CLAUDE_REVIEW.md`. Implementation notes go in `CODEX_REPORT.md` under "Claude implementation".
+- Claude stops after every task with a report.
+- Phases: (1) T-01 → (2) T-02, T-03 → (3) T-10, T-11 → (4) T-20–T-22 → (5) T-30–T-32 → (6) T-39. Phases 3–5 need B-04, B-05, B-07 and B-08 decided first.
+
+If Codex returns, the original Claude-reviews / Codex-implements protocol below applies again.
+
 ## Coordination protocol
 
 Writing a file does not notify the other AI. The human relays "task X is ready" between terminals.
