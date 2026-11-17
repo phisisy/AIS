@@ -10,8 +10,8 @@ use App\Enrollment\Services\SectionService;
 
 final class SectionController
 {
-    private const CREATE_FIELDS = ['term_id', 'course_code', 'course_title', 'units', 'section_code', 'capacity', 'meetings'];
-    private const UPDATE_FIELDS = ['course_title', 'units', 'capacity', 'meetings'];
+    private const CREATE_FIELDS = ['term_id', 'course_code', 'course_title', 'units', 'section_code', 'capacity', 'delivery_mode', 'meetings'];
+    private const UPDATE_FIELDS = ['course_title', 'units', 'capacity', 'delivery_mode', 'meetings'];
 
     public function __construct(private readonly SectionService $sections)
     {

@@ -172,3 +172,51 @@ Full detail is in plan §9, `ARCHITECTURE.md` §4.1, `API_CONTRACTS.md` §2–§
 ## 10. Commits
 
 - Implementation commit: `b04fec4` on `task/T-20-terms-sections`. This follow-up records the hash. Not merged, not pushed.
+
+## 11. Policy alignment (owner decisions, 2026-11-17)
+
+T-20 is conditionally approved, pending policy alignment and an independent review.
+
+| # | Decision | Applied |
+|---|---|---|
+| 1 | Term codes are immutable | Unchanged (already enforced) |
+| 2 | Units are whole numbers 1–12, provisionally | Unchanged |
+| 3 | Sections with no meetings only when explicitly TBA or online asynchronous | **Implemented**: new `delivery_mode` |
+| 4 | Course and section codes are immutable | Unchanged |
+| 5 | No hard deletion; future archival documented | No delete exists. Requirements are in plan §15 |
+| 6 | Terms list unpaginated for MVP | Unchanged |
+| 7 | At most 5 instructors per section in T-21 | Recorded in the T-21 task and plan §14 |
+
+**Delivery mode (decision 3):**
+- **The field:** `delivery_mode` is one of `scheduled` (the default), `tba` or `online_async`. It is optional on create and can be changed by PATCH. It is stored between `approved_count` and `meetings`, and in the response it appears after `remaining`.
+- **Meetings:**
+  - `scheduled` needs 1–14 meetings.
+  - `tba` and `online_async` may have 0–14.
+  - An empty list is never taken to mean TBA (422).
+  - The overlap check applies to every mode.
+- **PATCH:** the mode/meetings pairing is re-checked on the merged row inside the store lock. A rejected PATCH leaves the store unchanged.
+- **Stored rows:** each row must have a valid mode, and a `scheduled` row must have at least one meeting. Otherwise the store fails closed. Stores written before this change, which lack `delivery_mode`, now fail closed. No such store exists in the workspace, and T-20 was never merged.
+
+**Files changed:** `Section.php`, `SectionService.php`, `SectionController.php` and `MockCatalogRepository.php`; `tests/Enrollment/{SectionServiceTest,EnrollmentHttpTest,CatalogStoreTest}.php` (qa-engineer); the README, `API_CONTRACTS.md`, the plan (P9, §3.2, §4, §14–§16) and the task board.
+
+**Bug found by QA and fixed:**
+- **Symptom:** on create, a meeting item with an error, such as `day:"mon"`, also produced a misleading `meetings: "needs at least one meeting"` error.
+- **Fix:** the mode/meetings check is now skipped when any `meetings` or `meetings.N.*` error already exists. A regression test was added.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| `php tests/run.php` | 163 passed, 0 failed |
+| `php -l` | 104 files, 0 failures |
+| Apache check | PASS, both document roots |
+| Mutation checks (scratch copy) | All killed: `requireMeetingsForMode` made a no-op; the merged-row check removed from the PATCH; the stored-row rule loosened to allow 0 meetings for scheduled |
+
+**Impact on later tasks (plan §16):**
+- **T-21:** none, apart from the 5-instructor cap.
+- **T-22:** sections with no meetings never clash. `/api/schedules/me` must list them without time slots. Edits that add meetings or switch a section to `scheduled` after enrollments exist can create clashes, so T-22 must decide whether to restrict them.
+- **T-40:** a `delivery_mode` column; a section may have zero meeting rows only when it isn't `scheduled`.
+
+**Not done for this change:**
+- Claude's own security-reviewer wasn't re-run for this delta. AGY's independent review covers it.
+- Two older tests were loosened while the bug was open. The new regression test now asserts the exact behaviour.

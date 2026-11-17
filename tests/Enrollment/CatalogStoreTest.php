@@ -14,7 +14,7 @@ function storeTermRow(array $override = []): array
 function storeSectionRow(array $override = []): array
 {
     return array_replace(['id' => 1, 'term_id' => 1, 'course_code' => 'CS101', 'course_title' => 'Intro', 'units' => 3, 'section_code' => 'A',
-        'capacity' => 40, 'approved_count' => 0, 'meetings' => [['day' => 'MON', 'start' => '09:00', 'end' => '10:30', 'room' => 'R-101']],
+        'capacity' => 40, 'approved_count' => 0, 'delivery_mode' => 'scheduled', 'meetings' => [['day' => 'MON', 'start' => '09:00', 'end' => '10:30', 'room' => 'R-101']],
         'created_at' => '2026-11-17T00:00:00Z', 'updated_at' => '2026-11-17T00:00:00Z'], $override);
 }
 
@@ -30,6 +30,11 @@ test('Catalog store: a valid snapshot, a missing file and {} are accepted', func
         $sections->create($users->findById(2), sectionInput());
         writeEnrollmentStore($directory, json_encode(['terms' => [storeTermRow(['is_current' => true])], 'sections' => [storeSectionRow()]]));
         same(1, $repository->findSection(1)->id());
+        // tba and online_async rows may have no meetings.
+        writeEnrollmentStore($directory, json_encode(['terms' => [storeTermRow()], 'sections' => [
+            storeSectionRow(['delivery_mode' => 'tba', 'meetings' => []]),
+            storeSectionRow(['id' => 2, 'section_code' => 'B', 'delivery_mode' => 'online_async', 'meetings' => []])]]));
+        same(['tba', 'online_async'], [$repository->findSection(1)->deliveryMode(), $repository->findSection(2)->deliveryMode()]);
         // Only one of the two allowed keys present.
         writeEnrollmentStore($directory, json_encode(['terms' => [storeTermRow()]]));
         same(1, count($repository->terms()));
@@ -65,6 +70,13 @@ test('Catalog store: every corrupt snapshot fails closed on read and on write an
         'sections without any terms' => json_encode(['sections' => [$s]]),
         'meeting bad day' => json_encode(['terms' => [$t], 'sections' => [storeSectionRow(['meetings' => [['day' => 'MONDAY', 'start' => '09:00', 'end' => '10:00', 'room' => 'R']]])]]),
         'meeting overlap' => json_encode(['terms' => [$t], 'sections' => [storeSectionRow(['meetings' => [
+            ['day' => 'MON', 'start' => '09:00', 'end' => '10:00', 'room' => 'R'], ['day' => 'MON', 'start' => '09:30', 'end' => '10:30', 'room' => 'R']]])]]),
+        'missing delivery_mode' => json_encode(['terms' => [$t], 'sections' => [$without($s, 'delivery_mode')]]),
+        'invalid delivery_mode' => json_encode(['terms' => [$t], 'sections' => [storeSectionRow(['delivery_mode' => 'TBA'])]]),
+        'null delivery_mode' => json_encode(['terms' => [$t], 'sections' => [storeSectionRow(['delivery_mode' => null])]]),
+        'delivery_mode after meetings' => json_encode(['terms' => [$t], 'sections' => [array_merge($without($s, 'delivery_mode'), ['delivery_mode' => 'tba'])]]),
+        'scheduled with empty meetings' => json_encode(['terms' => [$t], 'sections' => [storeSectionRow(['delivery_mode' => 'scheduled', 'meetings' => []])]]),
+        'tba with overlapping meetings' => json_encode(['terms' => [$t], 'sections' => [storeSectionRow(['delivery_mode' => 'tba', 'meetings' => [
             ['day' => 'MON', 'start' => '09:00', 'end' => '10:00', 'room' => 'R'], ['day' => 'MON', 'start' => '09:30', 'end' => '10:30', 'room' => 'R']]])]]),
         'no meetings' => json_encode(['terms' => [$t], 'sections' => [storeSectionRow(['meetings' => []])]]),
         'term dates reversed' => json_encode(['terms' => [storeTermRow(['start_date' => '2026-12-18', 'end_date' => '2026-08-10'])], 'sections' => []]),

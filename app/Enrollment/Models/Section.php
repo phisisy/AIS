@@ -8,7 +8,9 @@ use RuntimeException;
 final class Section
 {
     public const FIELDS = ['id', 'term_id', 'course_code', 'course_title', 'units', 'section_code',
-        'capacity', 'approved_count', 'meetings', 'created_at', 'updated_at'];
+        'capacity', 'approved_count', 'delivery_mode', 'meetings', 'created_at', 'updated_at'];
+    /** Only an explicit tba/online_async designation allows a section without meetings (owner decision 3). */
+    public const DELIVERY_MODES = ['scheduled', 'tba', 'online_async'];
     public const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
     private function __construct(private readonly array $row)
@@ -26,7 +28,8 @@ final class Section
             || !is_string($row['section_code']) || preg_match('/\A[A-Z0-9][A-Z0-9-]{0,9}\z/', $row['section_code']) !== 1
             || !is_int($row['capacity']) || $row['capacity'] < 1 || $row['capacity'] > 1000
             || !is_int($row['approved_count']) || $row['approved_count'] < 0 || $row['approved_count'] > $row['capacity']
-            || !self::validMeetings($row['meetings'])
+            || !in_array($row['delivery_mode'], self::DELIVERY_MODES, true)
+            || !self::validMeetings($row['meetings'], $row['delivery_mode'] === 'scheduled' ? 1 : 0)
             || !is_string($row['created_at']) || !is_string($row['updated_at'])) {
             throw new RuntimeException('Invalid stored section.');
         }
@@ -40,9 +43,9 @@ final class Section
             && preg_match('/[\p{Cc}\p{Cf}]/u', $value) === 0;
     }
 
-    private static function validMeetings(mixed $meetings): bool
+    private static function validMeetings(mixed $meetings, int $min): bool
     {
-        if (!is_array($meetings) || !array_is_list($meetings) || count($meetings) < 1 || count($meetings) > 14) {
+        if (!is_array($meetings) || !array_is_list($meetings) || count($meetings) < $min || count($meetings) > 14) {
             return false;
         }
         foreach ($meetings as $i => $meeting) {
@@ -69,6 +72,7 @@ final class Section
     public function sectionCode(): string { return $this->row['section_code']; }
     public function capacity(): int { return $this->row['capacity']; }
     public function approvedCount(): int { return $this->row['approved_count']; }
+    public function deliveryMode(): string { return $this->row['delivery_mode']; }
 
     public function toArray(): array
     {

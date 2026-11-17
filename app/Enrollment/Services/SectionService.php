@@ -15,6 +15,9 @@ final class SectionService
 {
     private const STAFF = ['registrar', 'admin'];
     private const CREATE_FIELDS = ['term_id', 'course_code', 'course_title', 'units', 'section_code', 'capacity', 'meetings'];
+    /** delivery_mode is optional on create and defaults to 'scheduled'; it is never inferred from an empty meeting list. */
+    private const OPTIONAL_FIELDS = ['delivery_mode'];
+    private const NO_MEETINGS = 'A scheduled section needs at least one meeting. Set delivery_mode to "tba" or "online_async" for a section without meetings.';
     private Closure $clock;
 
     public function __construct(
@@ -67,7 +70,7 @@ final class SectionService
     public function create(User $actor, array $input): array
     {
         $this->authorization->requireRole($actor, self::STAFF);
-        $this->allowFields($input, self::CREATE_FIELDS);
+        $this->allowFields($input, [...self::CREATE_FIELDS, ...self::OPTIONAL_FIELDS]);
         $errors = [];
         foreach (self::CREATE_FIELDS as $field) {
             if (!array_key_exists($field, $input)) {
@@ -75,7 +78,12 @@ final class SectionService
             }
         }
         $this->throwIfErrors($errors);
-        $fields = $this->fields($input, $errors);
+        $fields = $this->fields($input, $errors) + ['delivery_mode' => 'scheduled'];
+        // Skip when the meetings or the mode were already rejected (including per-item meetings.N.* errors).
+        $meetingErrors = preg_grep('/\Ameetings(\.|\z)/', array_map('strval', array_keys($errors)));
+        if ($meetingErrors === [] && !isset($errors['delivery_mode'])) {
+            self::requireMeetingsForMode($fields, $errors);
+        }
         $this->throwIfErrors($errors);
         return $this->catalog->createSection($fields, $this->now())->toArray();
     }
@@ -83,7 +91,7 @@ final class SectionService
     public function update(User $actor, int $id, array $input): array
     {
         $this->authorization->requireRole($actor, self::STAFF);
-        $this->allowFields($input, ['course_title', 'units', 'capacity', 'meetings']);
+        $this->allowFields($input, ['course_title', 'units', 'capacity', 'delivery_mode', 'meetings']);
         if ($input === []) {
             throw new HttpException(422, 'Validation failed.', ['body' => 'Provide at least one field to change.']);
         }
@@ -93,6 +101,12 @@ final class SectionService
         $this->throwIfErrors($errors);
         // Read approved_count only under the write lock, including for partial PATCHes.
         $check = static function (array $row): void {
+            // A PATCH may change only the mode or only the meetings, so the pairing is checked on the merged row.
+            $errors = [];
+            self::requireMeetingsForMode($row, $errors);
+            if ($errors !== []) {
+                throw new HttpException(422, 'Validation failed.', $errors);
+            }
             if ($row['capacity'] < $row['approved_count']) {
                 throw new HttpException(409, 'Validation failed.',
                     ['capacity' => 'Capacity cannot be below the approved count (' . $row['approved_count'] . ').']);
@@ -129,17 +143,29 @@ final class SectionService
                     ? $fields[$field] = $input[$field] : $errors[$field] = "Use a whole number from 1 to {$max}.";
             }
         }
+        if (array_key_exists('delivery_mode', $input)) {
+            in_array($input['delivery_mode'], Section::DELIVERY_MODES, true)
+                ? $fields['delivery_mode'] = $input['delivery_mode'] : $errors['delivery_mode'] = 'Use one of: scheduled, tba, online_async.';
+        }
         if (array_key_exists('meetings', $input)) {
             $fields['meetings'] = $this->meetings($input['meetings'], $errors);
         }
         return $fields;
     }
 
+    /** Ordinary scheduled sections need a meeting; only an explicit tba/online_async mode may have none. */
+    private static function requireMeetingsForMode(array $row, array &$errors): void
+    {
+        if ($row['delivery_mode'] === 'scheduled' && $row['meetings'] === []) {
+            $errors['meetings'] = self::NO_MEETINGS;
+        }
+    }
+
     /** Request preserves meeting objects as stdClass; JSON arrays are never meeting objects. */
     private function meetings(mixed $input, array &$errors): array
     {
-        if (!is_array($input) || !array_is_list($input) || count($input) < 1 || count($input) > 14) {
-            $errors['meetings'] = 'Provide 1 to 14 meetings.';
+        if (!is_array($input) || !array_is_list($input) || count($input) > 14) {
+            $errors['meetings'] = 'Provide a list of at most 14 meetings.';
             return [];
         }
         $meetings = [];

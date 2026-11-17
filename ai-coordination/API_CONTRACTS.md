@@ -79,7 +79,11 @@ Enrollment rules (checked in the service, inside one transaction):
 5. No time overlap with the student's `pending`/`approved` meetings in the same term → else 409 with the clashing section.
 6. Status flow: `pending → approved | rejected`; `approved/rejected` are final in MVP ⚠. Students cannot approve.
 
-Section: `{ id, term_id, course_code, course_title, units, section_code, capacity, approved_count, remaining, meetings:[{day:"MON".."SUN", start:"HH:MM", end:"HH:MM", room}], instructors:[{faculty_id,name}] }`
+Section (T-20): `{ id, term_id, course_code, course_title, units, section_code, capacity, approved_count, remaining, delivery_mode: "scheduled"|"tba"|"online_async", meetings:[{day:"MON".."SUN", start:"HH:MM", end:"HH:MM", room}], created_at, updated_at }`. T-21 adds `instructors:[{faculty_id,name}]`.
+- **Delivery mode (owner decision, 2026-11-17):** `delivery_mode` is optional on create (default `scheduled`) and can be changed by PATCH.
+- **Meetings:** a `scheduled` section needs 1–14 meetings. `tba` and `online_async` sections may have 0–14. An empty list is never taken to mean TBA (422).
+- **Overlap:** the rule is unchanged for every mode.
+- **For T-22:** sections with no meetings never cause a schedule clash.
 Enrollment: `{ id, student_id, section_id, term_id, status, requested_at, decided_at?, decided_by?, reason? }`
 
 ### Team 5 — Faculty & Grades

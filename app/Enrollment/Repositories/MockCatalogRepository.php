@@ -14,7 +14,7 @@ use RuntimeException;
 final class MockCatalogRepository implements CatalogRepositoryInterface
 {
     private const TERM_MUTABLE = ['name', 'start_date', 'end_date', 'is_current', 'enrollment_open'];
-    private const SECTION_MUTABLE = ['course_title', 'units', 'capacity', 'meetings'];
+    private const SECTION_MUTABLE = ['course_title', 'units', 'capacity', 'delivery_mode', 'meetings'];
 
     public function __construct(private readonly JsonStore $store)
     {
@@ -133,7 +133,8 @@ final class MockCatalogRepository implements CatalogRepositoryInterface
             $id = array_reduce($snapshot['sections'], static fn (int $max, Section $section): int => max($max, $section->id()), 0) + 1;
             $row = ['id' => $id, 'term_id' => $fields['term_id'], 'course_code' => $fields['course_code'],
                 'course_title' => $fields['course_title'], 'units' => $fields['units'], 'section_code' => $fields['section_code'],
-                'capacity' => $fields['capacity'], 'approved_count' => 0, 'meetings' => $fields['meetings'],
+                'capacity' => $fields['capacity'], 'approved_count' => 0,
+                'delivery_mode' => $fields['delivery_mode'] ?? 'scheduled', 'meetings' => $fields['meetings'],
                 'created_at' => $now, 'updated_at' => $now];
             $section = Section::fromArray($row);
             $data['sections'][] = $row;

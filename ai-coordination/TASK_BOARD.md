@@ -1,6 +1,6 @@
 # Task Board — AIS Backend
 
-Statuses: `PROPOSED` · `APPROVED` · `IN_PROGRESS` · `READY_FOR_REVIEW` · `CHANGES_REQUESTED` · `VERIFIED` · `BLOCKED`
+Statuses: `PROPOSED` · `APPROVED` · `IN_PROGRESS` · `READY_FOR_REVIEW` · `READY_FOR_AGY_REVIEW` · `CHANGES_REQUESTED` · `VERIFIED` · `BLOCKED`
 
 Rules: only the project owner sets `APPROVED`. Codex works only on `APPROVED` tasks, edits only the listed
 files, and only one `IN_PROGRESS` task may touch a given file. Tests are offline (`php tests/run.php`, mock repositories) unless stated otherwise.
@@ -20,8 +20,8 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-11a | 3 | Academic records + StudentDirectory | T-10 ✔ | VERIFIED (merged `d062a5e`; implementation `0b91668`; see `T11A_IMPLEMENTATION_REPORT.md`) |
 | T-11b | 3 | Course catalog, curriculum, real enrollment/grade summaries | T-11a, D1, T-22, T-32 | PROPOSED (not approved) |
 | T-06 | 2 | Protected admin registry + owner-only recovery CLI | T-03 ✔ | PROPOSED (design conditionally approved; `PROPOSAL_ADMIN_PROTECTION_RECOVERY.md` v2; implementation not approved) |
-| T-20 | 4 | Terms & sections catalog | T-02 ✔ | READY_FOR_REVIEW (APPROVED by owner 2026-11-17; committed `b04fec4` on `task/T-20-terms-sections`, not merged; see `T20_IMPLEMENTATION_REPORT.md`) |
-| T-21 | 4 | SectionDirectory, faculty identity port, instructor assignments | T-20, B-04 ✔ | PROPOSED (scope revised for B-04; owner to confirm, plan Q7) |
+| T-20 | 4 | Terms & sections catalog | T-02 ✔ | READY_FOR_AGY_REVIEW (handoff: `AGENT_HANDOFF.md`; TBA/online sections not implemented, owner decision pending; APPROVED by owner 2026-11-17; committed `b04fec4` on `task/T-20-terms-sections`, not merged; see `T20_IMPLEMENTATION_REPORT.md`) |
+| T-21 | 4 | SectionDirectory, faculty identity port, instructor assignments | T-20, B-04 ✔ | PROPOSED (scope revised for B-04; max 5 instructors per section confirmed by owner, Q7) |
 | T-22 | 4 | Enrollment requests, approval & schedule | T-11, T-21 | PROPOSED |
 | T-30 | 5 | Faculty profiles + FacultyIdentityLookup | T-21, B-04 ✔ | PROPOSED (assignments moved to Team 4 by B-04) |
 | T-31 | 5 | Class rosters | T-22, T-30 | PROPOSED |
@@ -157,7 +157,7 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 - **Description (revised for B-04, owner 2026-11-17; scope to be confirmed):** `SectionDirectory` (`findSection`, `approvedStudentIds`, `isAssigned`, `sectionIdsForFaculty`, `assignedFacultyIds`), the `FacultyIdentityLookup` port (implemented by Team 5 in T-30; `UnavailableFacultyIdentity` refuses every id until then), the authoritative instructor assignment endpoints `POST/DELETE /api/registrar/sections/{id}/instructors`, append-only `assignment_history` written in the same transaction, and `instructors` in section JSON. See `docs/plans/T-20-terms-sections.md` §9. Replaces the earlier `InstructorLookup` design.
 - **Files allowed to change:** `app/Enrollment/**` (including `Contracts/`), `routes/enrollment.php`, `app/bootstrap.php` (Enrollment wiring), `tests/Enrollment/*`, `README.md`
 - **Dependencies:** T-20, B-04 ✔
-- **Acceptance criteria:** Interfaces match `API_CONTRACTS.md` §3. Only registrar/admin assign (server-side). Unknown, inactive or unverifiable faculty ids → 422 (fail closed). Duplicate assignment → 409. Each successful change writes exactly one audit entry atomically; failures write none. No faculty data copied (ids only; names resolved at read time).
+- **Acceptance criteria:** Interfaces match `API_CONTRACTS.md` §3. Only registrar/admin assign (server-side). Unknown, inactive or unverifiable faculty ids → 422 (fail closed). Duplicate assignment → 409. At most 5 instructors per section (owner, Q7) → 409 above that. Each successful change writes exactly one audit entry atomically; failures write none. No faculty data copied (ids only; names resolved at read time).
 - **Required tests:** directory unit tests, role matrix, fail-closed lookup, duplicate, audit atomicity, section JSON includes `instructors`.
 - **Status:** PROPOSED
 
@@ -173,6 +173,7 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
   4. Only `pending` can change. Only registrar/admin can approve or reject.
   5. Schedule shows approved enrollments for the term with day, time, room, course and instructor.
 - **Required tests:** each rule, the approval race (two processes against the mock store), ownership (student can't see others' enrollments), role matrix, schedule output.
+- **Note from T-20 (owner decision 2026-11-17):** sections have `delivery_mode` (`scheduled`/`tba`/`online_async`). TBA and online-async sections may have no meetings, so they never clash and must still appear in `/api/schedules/me` without time slots. See `docs/plans/T-20-terms-sections.md` §16.
 - **Status:** PROPOSED
 
 ### T-30 — Faculty profiles & teaching assignments

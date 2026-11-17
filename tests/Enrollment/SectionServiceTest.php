@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/EnrollmentSupport.php';
 
+const NO_MEETINGS_MESSAGE = 'A scheduled section needs at least one meeting. Set delivery_mode to "tba" or "online_async" for a section without meetings.';
+
 /** Fixture with two terms (ids 1, 2). */
 function sectionFixture(string $directory): array
 {
@@ -18,7 +20,7 @@ test('Sections: create normalizes codes, stores approved_count 0, computes remai
         [, $sections, , $users] = sectionFixture($directory);
         $s = $sections->create($users->findById(2), sectionInput(['course_code' => ' cs101 ', 'section_code' => ' a ', 'meetings' => [
             meeting('WED', '13:00', '14:00'), meeting('MON', '10:30', '11:30'), meeting('MON', '09:00', '10:30', ' R-2 ')]]));
-        same(['id', 'term_id', 'course_code', 'course_title', 'units', 'section_code', 'capacity', 'approved_count', 'remaining',
+        same(['id', 'term_id', 'course_code', 'course_title', 'units', 'section_code', 'capacity', 'approved_count', 'remaining', 'delivery_mode',
             'meetings', 'created_at', 'updated_at'], array_keys($s));
         same(['CS101', 'A', 0, 40, 40, 1], [$s['course_code'], $s['section_code'], $s['approved_count'], $s['capacity'], $s['remaining'], $s['id']]);
         same([['day' => 'MON', 'start' => '09:00', 'end' => '10:30', 'room' => 'R-2'],
@@ -88,7 +90,10 @@ test('Sections: meeting validation (day, time, room, shape, count, overlap)', fu
         [, $sections, $repository, $users] = sectionFixture($directory);
         $r = $users->findById(2);
         $keys = static function (mixed $meetings) use ($sections, $r): array {
-            return httpFailure(fn () => $sections->create($r, sectionInput(['meetings' => $meetings])))->errors;
+            $errors = httpFailure(fn () => $sections->create($r, sectionInput(['meetings' => $meetings])))->errors;
+            // Per-item errors are asserted here; the extra bare 'meetings' error is covered by its own test below.
+            return count(array_filter(array_keys($errors), static fn ($k) => str_starts_with((string) $k, 'meetings.'))) > 0
+                ? array_diff_key($errors, ['meetings' => 1]) : $errors;
         };
         foreach ([['mon', 'meetings.0.day'], ['MONDAY', 'meetings.0.day'], ['Mon', 'meetings.0.day'], ['', 'meetings.0.day']] as [$day, $key]) {
             same([$key], array_keys($keys([meeting($day)])));
@@ -110,9 +115,10 @@ test('Sections: meeting validation (day, time, room, shape, count, overlap)', fu
         same(['meetings.0'], array_keys($keys([['MON', '09:00', '10:00', 'R']])));
         same(['meetings.0'], array_keys($keys([['day' => 'MON', 'start' => '09:00', 'end' => '10:00', 'room' => 'R']])), 'assoc arrays are not stdClass');
         same(['meetings.0', 'meetings.1'], array_keys($keys(['MON', 5])));
-        foreach ([[], 'MON', null, ['a' => meeting()], (object) ['day' => 'MON'], array_fill(0, 15, meeting())] as $bad) {
-            same(['meetings' => 'Provide 1 to 14 meetings.'], $keys($bad));
+        foreach (['MON', null, ['a' => meeting()], (object) ['day' => 'MON'], array_fill(0, 15, meeting())] as $bad) {
+            same(['meetings' => 'Provide a list of at most 14 meetings.'], $keys($bad));
         }
+        same(['meetings' => NO_MEETINGS_MESSAGE], $keys([]));
         // Same-day overlap is 422 on the pair; the overlapping pair is reported by index.
         same(['meetings' => 'Meetings 0 and 1 overlap.'], $keys([meeting('MON', '09:00', '10:30'), meeting('MON', '10:00', '11:00')]));
         same(['meetings' => 'Meetings 0 and 1 overlap.'], $keys([meeting('MON', '09:00', '12:00'), meeting('MON', '10:00', '11:00')]));
@@ -200,7 +206,7 @@ test('Sections: PATCH allowlist, merge and replacement semantics, 404, immutable
         // meetings replace the whole list and are validated like on create.
         $s = $sections->update($r, 1, ['meetings' => [meeting('FRI', '14:00', '15:00')]]);
         same([['day' => 'FRI', 'start' => '14:00', 'end' => '15:00', 'room' => 'R-101']], $s['meetings']);
-        same(['meetings' => 'Provide 1 to 14 meetings.'], httpFailure(fn () => $sections->update($r, 1, ['meetings' => []]))->errors);
+        same(['meetings' => NO_MEETINGS_MESSAGE], httpFailure(fn () => $sections->update($r, 1, ['meetings' => []]))->errors);
         same(['meetings' => 'Meetings 0 and 1 overlap.'],
             httpFailure(fn () => $sections->update($r, 1, ['meetings' => [meeting('MON'), meeting('MON')]]))->errors);
         // Untouched fields stay; updated_at is the only other thing that changes.
@@ -266,6 +272,116 @@ test('Sections: get on a missing id is 404; student and faculty writes are 403',
         }
         same(1, $repository->searchSections([], 1, 10)['total']);
         same(40, $repository->findSection(1)->capacity());
+    } finally {
+        removeTestDirectory($directory);
+    }
+});
+
+test('Sections delivery_mode: scheduled needs a meeting; tba and online_async may have 0 to 14; an empty list never implies TBA', function (): void {
+    $directory = tempDirectory();
+    try {
+        [, $sections, $repository, $users] = sectionFixture($directory);
+        $r = $users->findById(2);
+        // Default is scheduled, and an empty list does not turn it into TBA.
+        $first = $sections->create($r, sectionInput());
+        same('scheduled', $first['delivery_mode']);
+        same(['id', 'term_id', 'course_code', 'course_title', 'units', 'section_code', 'capacity', 'approved_count', 'remaining',
+            'delivery_mode', 'meetings', 'created_at', 'updated_at'], array_keys($first));
+        foreach ([sectionInput(['section_code' => 'B', 'meetings' => []]), sectionInput(['section_code' => 'B', 'delivery_mode' => 'scheduled', 'meetings' => []])] as $input) {
+            $e = httpFailure(fn () => $sections->create($r, $input));
+            same([422, ['meetings' => NO_MEETINGS_MESSAGE]], [$e->status, $e->errors]);
+        }
+        same(1, $repository->searchSections([], 1, 10)['total']);
+        $max = [];
+        foreach (['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as $day) {
+            array_push($max, meeting($day, '08:00', '09:00'), meeting($day, '09:00', '10:00'));
+        }
+        foreach (['tba', 'online_async'] as $i => $mode) {
+            $none = $sections->create($r, sectionInput(['section_code' => "N{$i}", 'delivery_mode' => $mode, 'meetings' => []]));
+            same([$mode, []], [$none['delivery_mode'], $none['meetings']]);
+            $some = $sections->create($r, sectionInput(['section_code' => "M{$i}", 'delivery_mode' => $mode, 'meetings' => [meeting('TUE'), meeting('MON')]]));
+            same([$mode, ['MON', 'TUE']], [$some['delivery_mode'], array_column($some['meetings'], 'day')]);
+            same(14, count($sections->create($r, sectionInput(['section_code' => "X{$i}", 'delivery_mode' => $mode, 'meetings' => $max]))['meetings']));
+            // Bound, shape and overlap rules still apply in every mode.
+            $e = httpFailure(fn () => $sections->create($r, sectionInput(['section_code' => "Y{$i}", 'delivery_mode' => $mode, 'meetings' => array_merge($max, [meeting('MON', '12:00', '13:00')])])));
+            same(['meetings' => 'Provide a list of at most 14 meetings.'], $e->errors);
+            $e = httpFailure(fn () => $sections->create($r, sectionInput(['section_code' => "Y{$i}", 'delivery_mode' => $mode, 'meetings' => ['a' => meeting()]])));
+            same(['meetings' => 'Provide a list of at most 14 meetings.'], $e->errors);
+            $e = httpFailure(fn () => $sections->create($r, sectionInput(['section_code' => "Y{$i}", 'delivery_mode' => $mode,
+                'meetings' => [meeting('MON', '09:00', '10:30'), meeting('MON', '10:00', '11:00')]])));
+            same([422, ['meetings' => 'Meetings 0 and 1 overlap.']], [$e->status, $e->errors]);
+        }
+        same(7, $repository->searchSections([], 1, 100)['total']);
+    } finally {
+        removeTestDirectory($directory);
+    }
+});
+
+test('Sections delivery_mode: invalid values are 422 on create and PATCH and nothing is written', function (): void {
+    $directory = tempDirectory();
+    try {
+        [, $sections, $repository, $users] = sectionFixture($directory);
+        $r = $users->findById(2);
+        $sections->create($r, sectionInput());
+        $expected = ['delivery_mode' => 'Use one of: scheduled, tba, online_async.'];
+        foreach (['TBA', 'Scheduled', 'ONLINE_ASYNC', 'online', 'online-async', '', ' tba', 'tba ', null, 1, true, ['tba']] as $value) {
+            $e = httpFailure(fn () => $sections->create($r, sectionInput(['section_code' => 'Z', 'delivery_mode' => $value])));
+            same([422, $expected], [$e->status, $e->errors]);
+            $e = httpFailure(fn () => $sections->update($r, 1, ['delivery_mode' => $value]));
+            same([422, $expected], [$e->status, $e->errors]);
+        }
+        same(1, $repository->searchSections([], 1, 10)['total']);
+        same('scheduled', $repository->findSection(1)->deliveryMode());
+    } finally {
+        removeTestDirectory($directory);
+    }
+});
+
+test('Sections delivery_mode: PATCH checks the mode/meetings pairing on the merged row; a 422 leaves the store unchanged', function (): void {
+    $directory = tempDirectory();
+    try {
+        [, $sections, $repository, $users] = sectionFixture($directory);
+        $r = $users->findById(2);
+        $path = $directory . '/enrollment/enrollment.json';
+        $sections->create($r, sectionInput());                                                                    // 1: scheduled with a meeting
+        $sections->create($r, sectionInput(['section_code' => 'T', 'delivery_mode' => 'tba', 'meetings' => []])); // 2: tba, none
+        $before = file_get_contents($path);
+        foreach ([[2, ['delivery_mode' => 'scheduled']], [1, ['meetings' => []]], [2, ['delivery_mode' => 'scheduled', 'meetings' => []]],
+            [2, ['delivery_mode' => 'scheduled', 'units' => 5]]] as [$id, $patch]) {
+            $e = httpFailure(fn () => $sections->update($r, $id, $patch));
+            same([422, ['meetings' => NO_MEETINGS_MESSAGE]], [$e->status, $e->errors]);
+            same($before, file_get_contents($path));
+        }
+        same(422, httpFailure(fn () => $sections->update($r, 2, ['meetings' => [meeting('MON'), meeting('MON')]]))->status);
+        same($before, file_get_contents($path));
+        $a = $sections->update($r, 1, ['delivery_mode' => 'tba', 'meetings' => []]);
+        same(['tba', []], [$a['delivery_mode'], $a['meetings']]);
+        $b = $sections->update($r, 1, ['delivery_mode' => 'scheduled', 'meetings' => [meeting('FRI')]]);
+        same(['scheduled', ['FRI']], [$b['delivery_mode'], array_column($b['meetings'], 'day')]);
+        $c = $sections->update($r, 1, ['delivery_mode' => 'online_async']);   // mode alone keeps the meetings
+        same(['online_async', ['FRI']], [$c['delivery_mode'], array_column($c['meetings'], 'day')]);
+        $d = $sections->update($r, 1, ['meetings' => []]);                    // empty is fine once the mode allows it
+        same(['online_async', []], [$d['delivery_mode'], $d['meetings']]);
+        $e2 = $sections->update($r, 2, ['meetings' => [meeting('WED')]]);     // meetings alone on a tba section
+        same(['tba', ['WED']], [$e2['delivery_mode'], array_column($e2['meetings'], 'day')]);
+        same('scheduled', $sections->update($r, 2, ['delivery_mode' => 'scheduled'])['delivery_mode']);
+        same('scheduled', $sections->update($r, 2, ['units' => 2])['delivery_mode']);
+        same('online_async', $sections->update($r, 1, ['capacity' => 9])['delivery_mode']);
+        // The mode rule and the capacity rule are independent.
+        bumpApprovedCount($directory, 1, 3);
+        same(409, httpFailure(fn () => $sections->update($r, 1, ['delivery_mode' => 'tba', 'capacity' => 2]))->status);
+        same('online_async', $repository->findSection(1)->deliveryMode());
+    } finally {
+        removeTestDirectory($directory);
+    }
+});
+
+test('Sections delivery_mode: an invalid meeting item reports only its own error, not a spurious "needs a meeting"', function (): void {
+    $directory = tempDirectory();
+    try {
+        [, $sections, , $users] = sectionFixture($directory);
+        $e = httpFailure(fn () => $sections->create($users->findById(2), sectionInput(['meetings' => [meeting('mon')]])));
+        same(['meetings.0.day'], array_keys($e->errors));
     } finally {
         removeTestDirectory($directory);
     }

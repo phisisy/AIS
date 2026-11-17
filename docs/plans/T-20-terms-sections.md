@@ -34,7 +34,7 @@ Owner scope items and where they are covered:
 | P6 | Unknown `term_id` on section create gives **422** `{term_id: "Unknown term."}`, not 404. | 404 is for the URL resource. A body field that refers to a missing row is a validation error, the same as Students' `program_code` → 422 `Unknown program.`. It is checked inside the store lock. |
 | P7 | A section's own overlapping meetings give **422** (`meetings`), not 409. | It is a defect in the submitted payload, not a conflict with other stored rows. The 409 "schedule clash" in ARCHITECTURE §5 is T-22's student-level clash. |
 | P8 | Back-to-back meetings (`09:00–10:00`, then `10:00–11:00`) are **allowed**. Overlap means `a.start < b.end && b.start < a.end` on the same day. | This is standard interval semantics. |
-| P9 | Sections need **1–14 meetings**. | A schedule view and the T-22 clash check need at least one slot. 14 = two per day. See Q3 for TBA or online sections. |
+| P9 | **Revised (owner, 2026-11-17).** New field `delivery_mode` (`scheduled` default, `tba`, `online_async`). `scheduled` sections need **1–14 meetings**. `tba` and `online_async` may have **0–14**. An empty list is never taken to mean TBA. | Only an explicit designation allows a section without a timetable. 14 = two per day. |
 | P10 | Read endpoints don't re-check roles in the service (any active signed-in user, already enforced by the guard). Write services call `requireRole(STAFF)`. | Same as `/api/programs` (T-11a). |
 | P11 | `GET /api/terms` is **not paginated**. | Terms are few (a handful per year). See Q6. |
 | P12 | Without `term_id`, `GET /api/sections` lists all terms. It does not default to the current term. | Simpler and predictable. The frontend passes `term_id`. |
@@ -76,7 +76,7 @@ Path `{id}` is a positive integer (Router). Bodies are JSON objects only (415 / 
 ### 3.2 Sections
 
 **Section (response shape, exact key order). There is no `instructors` key in T-20, because T-21 adds it:**
-`{id, term_id, course_code, course_title, units, section_code, capacity, approved_count, remaining, meetings:[{day, start, end, room}], created_at, updated_at}`
+`{id, term_id, course_code, course_title, units, section_code, capacity, approved_count, remaining, delivery_mode, meetings:[{day, start, end, room}], created_at, updated_at}`
 `remaining = capacity − approved_count` is computed in `Section::toArray()` and never stored.
 
 | Method | Path | Guard | CSRF | Success | Errors |
@@ -93,8 +93,8 @@ Path `{id}` is a positive integer (Router). Bodies are JSON objects only (415 / 
 - `page`: 1–1,000,000, default 1. `per_page`: 1–100, default 20.
 - Order: `term_id`, `course_code`, `section_code`, `id`.
 
-**Create allowlist (all required):** `term_id`, `course_code`, `course_title`, `units`, `section_code`, `capacity`, `meetings`.
-**Update allowlist:** `course_title`, `units`, `capacity`, `meetings`. An empty body gives 422. `term_id`, `course_code`, `section_code`, `approved_count`, `remaining`, `id` or any other field gives 422 `Unknown field.`
+**Create allowlist:** `term_id`, `course_code`, `course_title`, `units`, `section_code`, `capacity` and `meetings` are required. `delivery_mode` is optional (default `scheduled`).
+**Update allowlist:** `course_title`, `units`, `capacity`, `delivery_mode`, `meetings`. An empty body gives 422. `term_id`, `course_code`, `section_code`, `approved_count`, `remaining`, `id` or any other field gives 422 `Unknown field.`
 `approved_count` is never client-writable. It is 0 on create. Only T-22, inside the store transaction, will change it.
 
 | Field | Rule | Error |
@@ -106,7 +106,9 @@ Path `{id}` is a positive integer (Router). Bodies are JSON objects only (415 / 
 | `section_code` | string, trimmed, uppercased, `\A[A-Z0-9][A-Z0-9-]{0,9}\z` | 422 |
 | `capacity` | int 1–1000. On PATCH it must be ≥ the stored `approved_count`, checked in the lock | 422 for range. **409** `{capacity: "Capacity cannot be below the approved count (N)."}` |
 | (`term_id`, `course_code`, `section_code`) | unique, checked in the lock on create | **409** `{section_code: "This section already exists for the course in this term."}` |
-| `meetings` | JSON array (PHP list), 1–14 items | 422 `{meetings: "Provide 1 to 14 meetings."}` |
+| `delivery_mode` | exactly `scheduled`, `tba` or `online_async` (case-sensitive) | 422 `Use one of: scheduled, tba, online_async.` |
+| `meetings` | JSON array (PHP list), at most 14 items | 422 `{meetings: "Provide a list of at most 14 meetings."}` |
+| `delivery_mode` + `meetings` | `scheduled` needs at least 1 meeting. `tba` and `online_async` may have 0. On PATCH this is checked on the **merged row inside the lock**, because either field may change alone | 422 `{meetings: "A scheduled section needs at least one meeting. …"}` |
 | `meetings[i]` | JSON object (arrives as `stdClass` from `Request`, so accept `stdClass` and convert with `get_object_vars`). Keys exactly `day`, `start`, `end`, `room`. Extra or missing key gives 422 at `meetings.i` | 422 `meetings.i` / `meetings.i.<field>` |
 | `day` | exactly one of `MON TUE WED THU FRI SAT SUN` (case-sensitive) | 422 |
 | `start`, `end` | `\A([01]\d|2[0-3]):[0-5]\d\z`, and `start < end` (string compare is valid when zero-padded) | 422 |
@@ -145,7 +147,8 @@ Both are immutable value objects like `Student`: a private constructor, `fromArr
   - `FIELDS = ['id','code','name','start_date','end_date','is_current','enrollment_open','created_at','updated_at']`
   - Getters: `id()`, `code()`, `isCurrent()`, `startDate()`, `endDate()`.
 - `Section`
-  - `FIELDS = ['id','term_id','course_code','course_title','units','section_code','capacity','approved_count','meetings','created_at','updated_at']`
+  - `FIELDS = ['id','term_id','course_code','course_title','units','section_code','capacity','approved_count','delivery_mode','meetings','created_at','updated_at']`
+  - `DELIVERY_MODES = ['scheduled','tba','online_async']`. A stored `scheduled` row with no meetings is invalid (fail closed).
   - `DAYS = ['MON','TUE','WED','THU','FRI','SAT','SUN']`
   - `fromArray` checks: `0 ≤ approved_count ≤ capacity`, `capacity ≥ 1`, and that meetings are a list of `{day,start,end,room}` with valid values.
   - Getters: `id()`, `termId()`, `courseCode()`, `sectionCode()`, `capacity()`, `approvedCount()`.
@@ -466,10 +469,31 @@ No destructive database operations. No schema changes. Nothing here needs approv
 
 | # | Question | Proposed default (used by this plan) |
 |---|---|---|
-| Q1 | Term `code` immutable, with no delete. Is a mistyped code acceptable until an archive or delete task exists? | Immutable |
-| Q2 | Units: integer 1–12. Are 0-unit or fractional-unit courses needed? | Int 1–12 |
-| Q3 | Must every section have at least one meeting (no TBA or online-only)? | Yes, 1–14 |
-| Q4 | `course_code` / `section_code` immutable after create? | Yes |
-| Q5 | Delete or archive for terms and sections? | Out of scope |
-| Q6 | Terms list unpaginated? | Yes |
-| Q7 | B-04: confirm T-21 is expanded (not a new task) for instructor assignment, with a max of 5 instructors per section | Expand T-21, max 5 |
+| Q1 | Term `code` immutable, with no delete. Is a mistyped code acceptable until an archive or delete task exists? | **Decided (owner, 2026-11-17):** immutable |
+| Q2 | Units: integer 1–12. Are 0-unit or fractional-unit courses needed? | **Decided:** whole numbers 1–12, provisionally |
+| Q3 | Must every section have at least one meeting (no TBA or online-only)? | **Decided:** scheduled sections need at least 1 meeting. Explicit `tba` or `online_async` sections may have none, and there is no inference from an empty list (P9) |
+| Q4 | `course_code` / `section_code` immutable after create? | **Decided:** immutable |
+| Q5 | Delete or archive for terms and sections? | **Decided:** no hard deletion. Archival requirements are documented in §15 |
+| Q6 | Terms list unpaginated? | **Decided:** unpaginated for MVP |
+| Q7 | B-04: confirm T-21 is expanded (not a new task) for instructor assignment, with a max of 5 instructors per section | **Decided:** at most 5 instructors per section in T-21 |
+
+## 15. Future archival requirements (owner decision 5; not implemented)
+
+There is no hard deletion of terms or sections, now or later. Rows are referenced by enrollments (T-22), assignments (T-21), grades (T-32) and academic history. A future archival task must:
+
+1. **Soft state:** archive with `archived_at` and `archived_by`. Never remove rows. Archived rows stay readable by id.
+2. **Default lists:** hide archived rows from default lists, with an explicit staff-only `?include_archived=true`.
+3. **Writes and enrollment:** refuse new enrollments, assignments and edits on archived sections, or on sections of archived terms (409). An archived term can't be `is_current` or `enrollment_open`.
+4. **Integrity:** refuse to archive a section with `pending` enrollments, or define how they are resolved first. Approved enrollments, grades and history stay intact and are still resolved.
+5. **Audit:** archive and unarchive by registrar or admin only, with CSRF. Each change is audited (actor, time, before and after) in the same transaction.
+6. **MySQL (T-40):** use the same soft-state columns. No `ON DELETE CASCADE` on these references.
+
+## 16. Impact of the delivery-mode change on later tasks
+
+- **T-21:** no change. Instructor assignment doesn't depend on meetings. Capped at 5 per section (Q7).
+- **T-22:**
+  - **Clash check:** the schedule-clash check (rule 5) compares meetings, so a section with no meetings never clashes.
+  - **Schedule view:** `/api/schedules/me` must still list approved `tba` and `online_async` sections, with `delivery_mode` and no time slots, rather than dropping them.
+  - **Later changes:** a PATCH that switches a section from `tba` to `scheduled`, or that adds meetings, can create clashes for students who are already enrolled. T-22 decides whether such edits are restricted once enrollments exist (see §10).
+- **T-31 / T-32:** no impact.
+- **T-40 (MySQL):** `sections.delivery_mode` is an enum-like column. A section can have zero meeting rows only when the mode isn't `scheduled`. The service enforces this inside the transaction.

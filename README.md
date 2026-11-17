@@ -326,13 +326,22 @@ triple is unique (409), and those three fields are immutable. Units are integers
 never client-writable; reducing capacity below it returns 409. `remaining` is
 computed as capacity minus approved count, never stored.
 
-Meetings are 1–14 objects with exactly `day`, `start`, `end`, `room`. Days are
+`delivery_mode` is optional: `scheduled` (default), `tba` or `online_async`,
+and PATCH may change it. A `scheduled` section needs at least one meeting.
+Only a section explicitly set to `tba` or `online_async` may have no meetings.
+An empty meeting list is never taken to mean TBA (422). The mode/meeting pairing
+is re-checked on the merged row during PATCH.
+
+Meetings are up to 14 objects with exactly `day`, `start`, `end`, `room`. Days are
 `MON` through `SUN`; times are zero-padded `HH:MM` with start before end.
 Rooms are trimmed, 1–30 characters, without control or format characters.
 Same-day overlaps are rejected (422); back-to-back meetings are allowed.
 Meetings are sorted by weekday then start time; PATCH replaces the whole list.
 Names and titles also reject control and format characters. Unknown or immutable
 body fields return 422 `Unknown field.`; empty PATCH bodies return 422.
+
+There is no hard delete for terms or sections. Archival is a future task: see
+the plan's "Future archival requirements".
 
 Section lists default to all terms, ordered by term id, course code, section
 code, then id. `term_id` and normalized `course` are exact filters; `search`

@@ -137,7 +137,7 @@ test('Enrollment HTTP: unknown and immutable fields are 422, immutable data is u
         same(201, $server->request('POST', '/api/registrar/terms', termInput(), $token)['status']);
         $created = $server->request('POST', '/api/registrar/sections', httpSectionBody(), $token);
         same(201, $created['status']);
-        same(['id', 'term_id', 'course_code', 'course_title', 'units', 'section_code', 'capacity', 'approved_count', 'remaining',
+        same(['id', 'term_id', 'course_code', 'course_title', 'units', 'section_code', 'capacity', 'approved_count', 'remaining', 'delivery_mode',
             'meetings', 'created_at', 'updated_at'], array_keys($created['json']['data']['section']));
         same('Section created.', $created['json']['message']);
         foreach ([['code' => 'NEW'], ['id' => 7], ['created_at' => 'x'], ['name' => 'ok', 'role' => 'admin']] as $body) {
@@ -185,7 +185,7 @@ test('Enrollment HTTP: meetings as JSON objects are accepted, as JSON arrays rej
         same(201, $ok['status']);
         same(['MON', 'WED'], array_column($ok['json']['data']['section']['meetings'], 'day'));
         $arr = $server->request('POST', '/api/registrar/sections', httpSectionBody(['section_code' => 'B', 'meetings' => [['MON', '09:00', '10:00', 'R-1']]]), $token);
-        same([422, ['meetings.0']], [$arr['status'], array_keys($arr['json']['errors'])]);
+        same([422, ['meetings.0']], [$arr['status'], array_keys(array_diff_key($arr['json']['errors'], ['meetings' => 1]))]);
         $overlap = $server->request('POST', '/api/registrar/sections', httpSectionBody(['section_code' => 'B',
             'meetings' => [httpMeeting('MON', '09:00', '10:30'), httpMeeting('MON', '10:00', '11:00')]]), $token);
         same([422, ['meetings' => 'Meetings 0 and 1 overlap.']], [$overlap['status'], $overlap['json']['errors']]);
@@ -261,6 +261,52 @@ test('Enrollment HTTP: a corrupt store gives a generic 500 on every route and is
             }
             same($contents, file_get_contents($path));
         }
+    } finally {
+        $server->close();
+    }
+});
+
+test('Enrollment HTTP: delivery_mode over real sessions, one case per mode', function (): void {
+    $server = enrollmentServer();
+    try {
+        $token = enrollmentLogin($server, 'registrar@example.test');
+        $server->request('POST', '/api/registrar/terms', termInput(), $token);
+        $noMeetings = 'A scheduled section needs at least one meeting. Set delivery_mode to "tba" or "online_async" for a section without meetings.';
+        $default = $server->request('POST', '/api/registrar/sections', httpSectionBody(), $token);
+        same([201, 'scheduled'], [$default['status'], $default['json']['data']['section']['delivery_mode']]);
+        same(['remaining', 'delivery_mode', 'meetings'], array_slice(array_keys($default['json']['data']['section']), 8, 3));
+        foreach ([['meetings' => []], ['delivery_mode' => 'scheduled', 'meetings' => []]] as $i => $override) {
+            $r = $server->request('POST', '/api/registrar/sections', httpSectionBody(['section_code' => "S{$i}"] + $override), $token);
+            same([422, ['meetings' => $noMeetings]], [$r['status'], $r['json']['errors']]);
+        }
+        foreach (['tba' => 'T', 'online_async' => 'O'] as $mode => $code) {
+            $r = $server->request('POST', '/api/registrar/sections', httpSectionBody(['section_code' => $code, 'delivery_mode' => $mode, 'meetings' => []]), $token);
+            same([201, $mode, []], [$r['status'], $r['json']['data']['section']['delivery_mode'], $r['json']['data']['section']['meetings']]);
+            $r = $server->request('POST', '/api/registrar/sections', httpSectionBody(['section_code' => "{$code}2", 'delivery_mode' => $mode,
+                'meetings' => [httpMeeting('MON', '09:00', '10:30'), httpMeeting('MON', '10:00', '11:00')]]), $token);
+            same([422, ['meetings' => 'Meetings 0 and 1 overlap.']], [$r['status'], $r['json']['errors']]);
+        }
+        $bad = $server->request('POST', '/api/registrar/sections', httpSectionBody(['section_code' => 'Q', 'delivery_mode' => 'TBA']), $token);
+        same([422, ['delivery_mode' => 'Use one of: scheduled, tba, online_async.']], [$bad['status'], $bad['json']['errors']]);
+        // PATCH merged-row rule (ids: 1 scheduled, 2 tba, 3 online_async).
+        $file = $server->directory . '/enrollment/enrollment.json';
+        $before = file_get_contents($file);
+        foreach ([[2, ['delivery_mode' => 'scheduled']], [1, ['meetings' => []]], [3, ['delivery_mode' => 'scheduled']]] as [$id, $body]) {
+            $r = $server->request('PATCH', "/api/registrar/sections/{$id}", $body, $token);
+            same([422, ['meetings' => $noMeetings]], [$r['status'], $r['json']['errors']]);
+        }
+        same($before, file_get_contents($file));
+        $r = $server->request('PATCH', '/api/registrar/sections/1', ['delivery_mode' => 'tba', 'meetings' => []], $token);
+        same([200, 'tba', []], [$r['status'], $r['json']['data']['section']['delivery_mode'], $r['json']['data']['section']['meetings']]);
+        enrollmentLogin($server, 'ana@example.test');
+        same(['tba', 'online_async', 'tba'], array_column($server->request('GET', '/api/sections')['json']['data']['sections'], 'delivery_mode'));
+        // A stored row without delivery_mode (pre-change data) fails closed.
+        $stored = json_decode((string) file_get_contents($file), true);
+        unset($stored['sections'][0]['delivery_mode']);
+        $path = writeEnrollmentStore($server->directory, json_encode($stored));
+        $r = $server->request('GET', '/api/sections/1');
+        same([500, 'An internal error occurred.'], [$r['status'], $r['json']['message']]);
+        same(json_encode($stored), file_get_contents($path));
     } finally {
         $server->close();
     }
