@@ -49,12 +49,17 @@ closed. Process environment values take precedence, including empty values.
   `production`, fails closed until a deployment is approved.
 - `APP_HTTPS`: `true` marks the session cookie `Secure`. Direct HTTPS does this
   automatically; forwarded-proto headers are ignored.
-- `APP_RUNTIME_PATH`: trusted private runtime directory, default
-  `storage/runtime/`, outside the public directory and ignored by Git. Holds
-  `sessions/`, `auth/users.json` and `auth/login-attempts.json`. This workspace
-  is in OneDrive: store writes retry briefly when sync or antivirus holds a file
-  open, but a runtime path outside OneDrive (e.g. `C:/ais-runtime`) avoids the
-  delay and keeps session files out of cloud sync.
+- `APP_RUNTIME_PATH`: trusted private runtime directory holding `sessions/`,
+  `auth/users.json` and `auth/login-attempts.json`. Default on Windows:
+  **`C:/ais-runtime`**, outside the OneDrive-synced project so sessions and
+  password hashes never sync to the cloud (other systems: `storage/runtime/`,
+  ignored by Git). It is created on first use (mode 0700; on Windows access
+  follows the parent folder's ACL, so keep it on a local, single-user drive).
+  Every request validates it: it must be an absolute path to a writable
+  directory and not inside `public/`. Otherwise the API returns a generic 500
+  and writes nothing. Existing data elsewhere is never moved automatically.
+  If you point it into OneDrive anyway, store writes retry briefly when sync
+  holds a file open.
 - `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`: lazy PDO
   configuration. Bootstrap opens no database connection in either mode. MySQL
   repositories and the Team 6 schema remain unimplemented; there is no fallback

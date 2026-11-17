@@ -69,3 +69,9 @@ Security review: no Critical, High or Medium findings.
 - **Info, for deployment (production still blocked):** per-IP limit by full IPv6 address and behind proxies; `__Host-` cookie prefix once TLS is mandatory.
 
 Caveat: the implementer and the main reviewer are the same model. The subagent review and executable tests are the independent evidence.
+
+### T-01 addendum — L3 resolved (owner chose option B, 2026-11-17)
+- Default `APP_RUNTIME_PATH` on Windows is now `C:/ais-runtime`, outside the OneDrive project; still configurable. Other systems use `storage/runtime` (git-ignored).
+- New `App\Core\RuntimeDirectory::prepare()`, called by bootstrap on every request and by the seeder. Fails closed for relative, stream or NUL paths, a non-directory, an unwritable directory, or any path resolving into `public/` (including `..` tricks and case variants on Windows). Creates the directory with mode 0700 if missing. On failure the API returns a generic 500 with no path in the body.
+- No existing runtime data existed (`storage/runtime` was never created), so nothing needed moving.
+- Tests: 3 new (default/override, 11 refusal cases, HTTP 500). Suite 49/49. Apache check PASS. Live probe with no `APP_RUNTIME_PATH` wrote only `C:/ais-runtime/sessions/…`, and nothing inside the project. The probe directory was removed afterward.

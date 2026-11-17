@@ -18,5 +18,9 @@ return [
     'repository' => $repository,
     'environment' => $environment,
     'https' => filter_var(Environment::get('APP_HTTPS', 'false'), FILTER_VALIDATE_BOOLEAN),
-    'runtime_path' => Environment::get('APP_RUNTIME_PATH', dirname(__DIR__) . '/storage/runtime'),
+    // Default outside the (OneDrive-synced) project on Windows so sessions and hashes stay local.
+    'runtime_path' => Environment::get(
+        'APP_RUNTIME_PATH',
+        PHP_OS_FAMILY === 'Windows' ? 'C:/ais-runtime' : dirname(__DIR__) . '/storage/runtime'
+    ),
 ];

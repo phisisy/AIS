@@ -96,3 +96,70 @@ test('Application environment allows development and testing only, defaulting to
         putenv($previous === false ? 'APP_ENV' : 'APP_ENV=' . $previous);
     }
 });
+
+test('Runtime path defaults outside the project on Windows and stays configurable', function (): void {
+    $previous = getenv('APP_RUNTIME_PATH');
+    try {
+        putenv('APP_RUNTIME_PATH');
+        $default = (require dirname(__DIR__, 2) . '/config/app.php')['runtime_path'];
+        if (PHP_OS_FAMILY === 'Windows') {
+            same('C:/ais-runtime', $default);
+        }
+        $project = strtolower(str_replace('\\', '/', dirname(__DIR__, 2)));
+        check(PHP_OS_FAMILY !== 'Windows' || !str_starts_with(strtolower($default), $project), 'Default must be outside the project.');
+        putenv('APP_RUNTIME_PATH=D:/custom-runtime');
+        same('D:/custom-runtime', (require dirname(__DIR__, 2) . '/config/app.php')['runtime_path']);
+    } finally {
+        putenv($previous === false ? 'APP_RUNTIME_PATH' : 'APP_RUNTIME_PATH=' . $previous);
+    }
+});
+
+test('RuntimeDirectory creates a private directory and refuses unsafe or unusable paths', function (): void {
+    $directory = tempDirectory();
+    try {
+        $public = $directory . DIRECTORY_SEPARATOR . 'public';
+        mkdir($public);
+        $created = App\Core\RuntimeDirectory::prepare($directory . '/runtime/nested', $public);
+        same(realpath($directory . '/runtime/nested'), $created);
+        check(is_dir($created));
+        same($created, App\Core\RuntimeDirectory::prepare($created, $public));
+        file_put_contents($directory . '/a-file', 'x');
+        $cases = [
+            'relative' => ['storage/runtime', 'Invalid runtime directory.'],
+            'empty' => ['', 'Invalid runtime directory.'],
+            'stream' => ['file://' . $directory, 'Invalid runtime directory.'],
+            'nul byte' => [$directory . "\0x", 'Invalid runtime directory.'],
+            'is a file' => [$directory . '/a-file', 'Runtime directory unavailable.'],
+            'under a file' => [$directory . '/a-file/sub', 'Runtime directory unavailable.'],
+            'public itself' => [$public, 'Runtime directory must not be web-public.'],
+            'inside public' => [$public . '/sessions', 'Runtime directory must not be web-public.'],
+            'dot-dot into public' => [$directory . '/runtime/../public/x', 'Runtime directory must not be web-public.'],
+        ];
+        foreach ($cases as $name => [$path, $message]) {
+            $error = throws(RuntimeException::class, fn () => App\Core\RuntimeDirectory::prepare($path, $public));
+            check($error->getMessage() === $message, "{$name}: got '{$error->getMessage()}'");
+        }
+        if (PHP_OS_FAMILY === 'Windows') {
+            $error = throws(RuntimeException::class, fn () => App\Core\RuntimeDirectory::prepare(strtoupper($public) . '\\x', $public));
+            same('Runtime directory must not be web-public.', $error->getMessage());
+        }
+    } finally {
+        removeTestDirectory($directory);
+    }
+});
+
+test('HTTP returns a generic 500 when the runtime directory is unavailable', function (): void {
+    $directory = tempDirectory();
+    $server = null;
+    try {
+        file_put_contents($directory . '/not-a-directory', 'x');
+        $server = new CoreHttpServer(['APP_RUNTIME_PATH' => $directory . '/not-a-directory']);
+        [$status, , $body] = $server->request('GET', '/');
+        same(500, $status);
+        same('An internal error occurred.', json_decode($body)->message);
+        check(!str_contains($body, 'not-a-directory') && !str_contains($body, 'untime'), 'Error must not reveal the path.');
+    } finally {
+        $server?->close();
+        removeTestDirectory($directory);
+    }
+});

@@ -10,6 +10,7 @@ use App\Core\Environment;
 use App\Core\JsonStore;
 use App\Core\Response;
 use App\Core\Router;
+use App\Core\RuntimeDirectory;
 
 require_once __DIR__ . '/autoload.php';
 
@@ -26,7 +27,7 @@ $container['router']->add('GET', '/', static fn (): Response => Response::succes
 if ($container['config']['repository'] !== 'mock') {
     throw new RuntimeException('MySQL repositories are not available yet.');
 }
-$runtime = rtrim($container['config']['runtime_path'], '/\\');
+$runtime = RuntimeDirectory::prepare($container['config']['runtime_path'], dirname(__DIR__) . '/public');
 $container['session'] = new Session(
     $runtime,
     $container['config']['https'] || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')

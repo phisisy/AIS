@@ -9,6 +9,7 @@ use App\Auth\Repositories\MockUserRepository;
 use App\Auth\Services\AuthService;
 use App\Core\Environment;
 use App\Core\JsonStore;
+use App\Core\RuntimeDirectory;
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -35,7 +36,7 @@ try {
         $rows[] = ['id' => $id, 'email' => $email, 'roles' => $roles, 'status' => 'active',
             'password_hash' => AuthService::hashPassword($passwords[$email]), 'auth_version' => 1];
     }
-    $path = rtrim($config['runtime_path'], '/\\') . '/auth/users.json';
+    $path = RuntimeDirectory::prepare($config['runtime_path'], dirname(__DIR__, 2) . '/public') . '/auth/users.json';
     (new MockUserRepository(new JsonStore($path)))->seed($rows);
 } catch (RuntimeException $exception) {
     fwrite(STDERR, 'Seeding failed: ' . $exception->getMessage() . PHP_EOL);
