@@ -13,7 +13,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-00 | Shared | Core HTTP skeleton + test runner | — (B-01, B-02 resolved) | VERIFIED |
 | T-01 | 2 | Authentication & sessions | T-00 ✔, B-06 ✔ | VERIFIED |
 | T-02 | 2 | RBAC middleware & authorization service | T-01 ✔ | VERIFIED |
-| T-03 | 2 | User administration + audit logging | T-02 | PROPOSED |
+| T-03 | 2 | User administration + audit logging | T-02 ✔ | VERIFIED |
 | T-10 | 3 | Student profiles | T-02 | PROPOSED |
 | T-11 | 3 | Academic records + StudentDirectory | T-10, B-07 | PROPOSED |
 | T-20 | 4 | Terms & sections catalog | T-02 | PROPOSED |
@@ -94,7 +94,8 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
   5. Every successful mutation writes exactly one audit entry in the same transaction (actor, action, target, safe before/after). No secrets.
   6. Audit list: admin-only, paginated, read-only.
 - **Required tests:** each endpoint × (admin, non-admin, anonymous), validation cases, last-admin, reset invalidates target session, audit written on success and absent on failure, audit has no secrets.
-- **Status:** PROPOSED
+- **Owner scope (2026-11-17):** owner list A1–A10, B, C, D and E supersede the dashboard and audit-list endpoint; both are deferred (no unnecessary endpoints). Branch `task/T-03-admin` from `main` at `96052c2`. Extra files: `app/bootstrap.php` (wiring), `tests/Auth/fixtures/admin_worker.php`, `tests/Auth/AdminSupport.php`, `README.md`.
+- **Status:** VERIFIED (Claude, 2026-11-17; see `T03_IMPLEMENTATION_REPORT.md`). Committed on `task/T-03-admin` only; awaiting owner review. Not merged.
 
 ### T-10 — Student profiles
 - **Team:** 3

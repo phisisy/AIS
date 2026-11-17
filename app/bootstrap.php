@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 use App\Auth\Controllers\AuthController;
+use App\Auth\Controllers\UserController;
+use App\Auth\Services\UserService;
 use App\Auth\Middleware\RouteGuard;
 use App\Auth\Services\AuthorizationService;
 use App\Auth\Repositories\MockUserRepository;
@@ -35,19 +37,20 @@ $container['session'] = new Session(
     $container['config']['https'] || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
 );
 $container['users'] = new MockUserRepository(new JsonStore($runtime . '/auth/users.json'));
-$container['auth'] = new AuthService(
-    $container['users'],
-    $container['session'],
-    new LoginRateLimiter(new JsonStore($runtime . '/auth/login-attempts.json'))
-);
+$limiter = new LoginRateLimiter(new JsonStore($runtime . '/auth/login-attempts.json'));
+$container['auth'] = new AuthService($container['users'], $container['session'], $limiter);
 // Team 2 — RBAC (T-02). Modules protect routes with $container['guard']->roles([...], $handler).
 $container['authorization'] = new AuthorizationService();
 $container['guard'] = new RouteGuard($container['auth'], $container['authorization'], $container['session']);
 // REMOTE_ADDR only: forwarded headers are client-controlled and ignored.
-$container['auth_controller'] = new AuthController(
-    $container['auth'],
-    $container['session'],
-    static fn (): string => (string) ($_SERVER['REMOTE_ADDR'] ?? '')
+$clientIp = static fn (): string => (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+$container['auth_controller'] = new AuthController($container['auth'], $container['session'], $clientIp);
+// Team 2 — user administration + audit (T-03).
+$container['user_controller'] = new UserController(
+    // Separate store: admin password re-confirmation never shares buckets with login.
+    new UserService($container['users'], $container['authorization'],
+        new LoginRateLimiter(new JsonStore($runtime . '/auth/reauth-attempts.json'))),
+    $clientIp
 );
 foreach (['auth', 'students', 'enrollment', 'faculty'] as $module) {
     $register = require dirname(__DIR__) . '/routes/' . $module . '.php';

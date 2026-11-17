@@ -96,3 +96,11 @@ Security review (read-only subagent): no Critical or High findings.
 - **Info accepted:** 405 `Allow` reveals which routes exist to anonymous callers.
 
 Design note for T-03: the T-01 auth routes stay unguarded by design (they check identity and CSRF themselves). Role promotion takes effect without re-login. T-03 should decide whether role changes bump `auth_version`, which would force re-login.
+
+## T-03 — User administration & audit logging — **VERIFIED** (2026-11-17)
+
+Full evidence is in `ai-coordination/T03_IMPLEMENTATION_REPORT.md`.
+- Implementation commit `bf5a268` on `task/T-03-admin`. Suite 82/82, lint 59/59, Apache PASS.
+- Read-only security review: no Critical or High findings. The Medium and all Low findings are fixed and tested. One Info item (admin resetting another admin's password) is an owner decision.
+- Last-admin protection: two independent protections under one exclusive lock. Multi-process races pass, and mutation checks show the race tests fail when both protections are removed.
+- Not merged; awaiting owner review.
