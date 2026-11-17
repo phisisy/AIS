@@ -12,7 +12,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 |---|---|---|---|---|
 | T-00 | Shared | Core HTTP skeleton + test runner | — (B-01, B-02 resolved) | VERIFIED |
 | T-01 | 2 | Authentication & sessions | T-00 ✔, B-06 ✔ | VERIFIED |
-| T-02 | 2 | RBAC middleware & authorization service | T-01 | PROPOSED |
+| T-02 | 2 | RBAC middleware & authorization service | T-01 ✔ | VERIFIED |
 | T-03 | 2 | User administration + audit logging | T-02 | PROPOSED |
 | T-10 | 3 | Student profiles | T-02 | PROPOSED |
 | T-11 | 3 | Academic records + StudentDirectory | T-10, B-07 | PROPOSED |
@@ -65,12 +65,21 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 
 ### T-02 — RBAC middleware & authorization service
 - **Team:** 2
-- **Description:** `AuthMiddleware`, `RoleMiddleware(roles[])`, `CsrfMiddleware`, `AuthorizationService::requireRole`. Multi-role users, no hierarchy.
-- **Files allowed to change:** `app/Auth/Middleware/*`, `app/Auth/Services/AuthorizationService.php`, `tests/Auth/Authorization*`
-- **Dependencies:** T-01
-- **Acceptance criteria:** Empty allowlist denies everyone. Unknown role codes never grant access. Inactive user → 401 even when called directly. Any matching role is allowed. 401 vs 403 used correctly.
-- **Required tests:** role matrix (4 roles × allowlists), multi-role, unknown role, inactive, middleware order (auth before role before CSRF).
-- **Status:** PROPOSED
+- **Description:** Route guard (authentication → role → CSRF, in that order), `AuthorizationService::requireRole`, ownership helper for module services. Multi-role users, no hierarchy.
+- **Files allowed to change:** `app/Auth/Middleware/*`, `app/Auth/Services/AuthorizationService.php`, `app/bootstrap.php` (authorization/guard wiring only), `tests/Auth/*` (new `Authorization*` tests, test-only fixtures, and a backward-compatible extension of `HttpSupport.php`), `README.md`, ai-coordination docs
+- **Dependencies:** T-01 (VERIFIED, merged `c434a27`)
+- **Branch:** `task/T-02-rbac` from `main` at `c434a27`
+- **Acceptance criteria (owner requirements 2026-11-17):**
+  1–4. Student, faculty, registrar and admin each reach exactly the routes whose allowlist names their role.
+  5. Multi-role users get the union of their roles. No hierarchy (admin is not a superuser).
+  6. Routes are protected server-side by the guard. Deny by default: an empty or unknown-only allowlist grants nobody; a typo'd allowlist fails at registration.
+  7. Anonymous → 401, wrong role → 403, missing/invalid CSRF on a state-changing method → 403 (checked only after auth and role).
+  8. Inactive users → 401, including on direct `requireRole` calls.
+  9. Role changes take effect on the next request in the same session, both demotion and promotion. Deactivation destroys the session.
+  10. No privilege escalation: client role headers, query or body are ignored. Unknown stored roles fail closed (generic 500). Ownership helper supports horizontal checks.
+  Errors reveal no role names or internals.
+- **Required tests:** role matrix (5 users × 6 allowlists over HTTP), multi-role, unknown roles (allowlist and stored), inactive, guard order, CSRF, role-change consistency, escalation attempts, ownership helper. All 49 existing tests still pass.
+- **Status:** VERIFIED (Claude, 2026-11-17; see CLAUDE_REVIEW.md). Not merged; awaiting owner approval
 
 ### T-03 — User administration + audit logging
 - **Team:** 2

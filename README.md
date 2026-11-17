@@ -99,6 +99,41 @@ overwrite an existing store):
 & 'C:\xampp\php\php.exe' database/seeders/dev_users.php
 ```
 
+## Role-based access control (T-02)
+
+Roles: `student`, `faculty`, `registrar`, `admin`. A user may hold several; access
+is the union. There is no hierarchy: `admin` is not a superuser, so list every
+role a route allows. Protect module routes with the guard from the container:
+
+```php
+$guard = $container['guard'];
+$router->add('GET', '/api/students', $guard->roles(['registrar', 'admin'], [$controller, 'index']));
+$router->add('PATCH', '/api/students/{id}', $guard->roles(['registrar', 'admin'], [$controller, 'update']));
+$router->add('GET', '/api/students/me', $guard->roles(['student'], [$controller, 'me']));
+// Handler signature: (Request $request, array $params, User $user): Response
+```
+
+The guard checks, in order: signed in and active (401 `Authentication required.`),
+then role (403 `Access denied.`), then `X-CSRF-Token` for any method other than
+GET/HEAD/OPTIONS (403 `Invalid CSRF token.`). The user is reloaded every request,
+so role changes and deactivation apply immediately. Identity comes only from the
+session; role or user fields sent by the client are never used. Allowlists are
+validated when routes are registered: an empty list or unknown role (e.g.
+`'Admin'`) throws. Unknown roles in stored users fail closed (generic 500).
+
+Every route except `/` and `/api/auth/*` **must** be wrapped by the guard; a test
+loads the real bootstrap and fails on any unwrapped route. GET/HEAD/OPTIONS skip
+the CSRF check and the cookie is SameSite=Lax, so those handlers must never change
+state.
+
+Record ownership (horizontal access) belongs to each module's service. Load the
+record first, then call
+`$container['authorization']->requireOwnerOrRole($user, $record->userId, ['registrar', 'admin'])`.
+It throws 404, so another user's record looks the same as a missing one. Pass the
+stored record's **account** id (`student.user_id`), never the route `{id}`, which
+is a profile id. Use `isOwnerOrHasRole()` (same rules, returns a bool) only to
+filter lists.
+
 ## Core interfaces
 
 - `app/bootstrap.php` returns an explicit array container with `config`,

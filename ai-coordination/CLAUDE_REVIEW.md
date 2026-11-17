@@ -75,3 +75,24 @@ Caveat: the implementer and the main reviewer are the same model. The subagent r
 - New `App\Core\RuntimeDirectory::prepare()`, called by bootstrap on every request and by the seeder. Fails closed for relative, stream or NUL paths, a non-directory, an unwritable directory, or any path resolving into `public/` (including `..` tricks and case variants on Windows). Creates the directory with mode 0700 if missing. On failure the API returns a generic 500 with no path in the body.
 - No existing runtime data existed (`storage/runtime` was never created), so nothing needed moving.
 - Tests: 3 new (default/override, 11 refusal cases, HTTP 500). Suite 49/49. Apache check PASS. Live probe with no `APP_RUNTIME_PATH` wrote only `C:/ais-runtime/sessions/…`, and nothing inside the project. The probe directory was removed afterward.
+
+## T-02 — Role-based access control — **VERIFIED** (2026-11-17)
+
+| # | Owner requirement | Verdict | Evidence |
+|---|---|---|---|
+| 1–4 | Student / faculty / registrar / admin permissions | Met | Unit matrix (4 roles × 6 allowlists); HTTP matrix (5 users × 6 routes, exact 403 body) |
+| 5 | Multi-role | Met | faculty+registrar user gets the union; no admin hierarchy (mutation-checked) |
+| 6 | Protected endpoints, deny by default | Met | Guard on every route; registration throws on empty or unknown allowlists; a test fails if any app route except `/` and `/api/auth/*` is unguarded |
+| 7 | Unauthorized rejection | Met | 401 anonymous, 403 role, 403 CSRF, checked in that order (mutation-checked) |
+| 8 | Inactive users | Met | Cannot sign in; `requireRole` gives 401 on a direct call; deactivation destroys the session, reactivation doesn't revive it |
+| 9 | Role changes vs. sessions | Met | Promotion and demotion apply on the next request in the same session |
+| 10 | No privilege escalation | Met | X-Role / query / body roles ignored; route params never identity; unknown stored roles → generic 500; `requireOwnerOrRole` gives 404 |
+| — | No sensitive info in errors | Met | Fixed messages only; tests assert no role names in bodies |
+
+Security review (read-only subagent): no Critical or High findings.
+- **Medium fixed:** an unwrapped route would be open. Guard output is now a `GuardedHandler`, and a bootstrap-level test enforces it.
+- **Low fixed:** the ownership helper was easy to misuse. Added a 404-throwing `requireOwnerOrRole`, staff roles are validated, the parameter is renamed to `$recordOwnerUserId`, and the README says "load the record, never pass the route id".
+- **Low documented:** safe methods skip CSRF under SameSite=Lax, so GET/HEAD/OPTIONS handlers must not change state.
+- **Info accepted:** 405 `Allow` reveals which routes exist to anonymous callers.
+
+Design note for T-03: the T-01 auth routes stay unguarded by design (they check identity and CSRF themselves). Role promotion takes effect without re-login. T-03 should decide whether role changes bump `auth_version`, which would force re-login.

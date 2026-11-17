@@ -21,11 +21,12 @@ final class AuthHttpServer
     public readonly string $directory;
     private readonly string $url;
 
-    public function __construct(array $overrides = [])
+    /** $router and $rows are optional so T-01 callers are unchanged (T-02 uses its own probe router and users). */
+    public function __construct(array $overrides = [], string $router = 'public/router.php', ?array $rows = null)
     {
         $this->directory = tempDirectory();
         try {
-            (new MockUserRepository(new JsonStore($this->directory . '/auth/users.json')))->seed(authTestRows());
+            (new MockUserRepository(new JsonStore($this->directory . '/auth/users.json')))->seed($rows ?? authTestRows());
             $socket = stream_socket_server('tcp://127.0.0.1:0', $errno, $error);
             check(is_resource($socket), 'Cannot reserve auth test port.');
             $address = stream_socket_get_name($socket, false);
@@ -37,7 +38,7 @@ final class AuthHttpServer
                 'APP_RUNTIME_PATH' => $this->directory,
             ], $overrides);
             $this->process = proc_open(
-                [PHP_BINARY, '-d', 'display_errors=0', '-d', 'display_startup_errors=0', '-d', 'upload_tmp_dir=' . $this->directory, '-S', $address, 'public/router.php'],
+                [PHP_BINARY, '-d', 'display_errors=0', '-d', 'display_startup_errors=0', '-d', 'upload_tmp_dir=' . $this->directory, '-S', $address, $router],
                 [0 => ['pipe', 'r'], 1 => ['file', $this->directory . '/stdout.log', 'w'], 2 => ['file', $this->directory . '/stderr.log', 'w']],
                 $pipes,
                 dirname(__DIR__, 2),
@@ -132,10 +133,10 @@ final class AuthHttpServer
         return $token;
     }
 
-    public function login(): array
+    public function login(string $email = 'student@example.test'): array
     {
         return $this->request('POST', '/api/auth/login', [
-            'email' => 'student@example.test',
+            'email' => $email,
             'password' => 'Synthetic-test-pass-42',
         ], $this->csrf());
     }

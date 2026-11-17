@@ -295,3 +295,31 @@ Codex reached its usage limit partway through T-01; the owner approved Claude as
 - Retry mutation check: with retries disabled, the retry test fails; restored to 10 and it passes.
 - Live probe with seeded accounts (`php -S`): csrf, then login (Set-Cookie `HttpOnly; SameSite=Lax`, CSRF rotated), then me 200, logout without CSRF 403, logout 200, me 401, wrong password 401.
 - No database connection, schema or SQL. No secrets committed.
+
+## T-02 — Claude implementation (2026-11-17)
+
+Branch `task/T-02-rbac` from `main` at `c434a27` (T-01 merged with `--no-ff` after the owner's pre-merge checks).
+
+Before T-02 (owner decision L3, option B, committed on the T-01 branch as `3f2e1f2`): the default runtime path on Windows is now `C:/ais-runtime`, validated by `App\Core\RuntimeDirectory` on every request.
+
+### Files
+| File | Change |
+|---|---|
+| `app/Auth/Services/AuthorizationService.php` | New. `requireRole` (401 inactive, 403 otherwise), `hasAnyRole` (strict, known roles only, no hierarchy), `validAllowlist` (throws on empty, unknown or mis-cased), `isOwnerOrHasRole` / `requireOwnerOrRole` (404) |
+| `app/Auth/Middleware/RouteGuard.php`, `GuardedHandler.php` | New. `roles([...], $h)` / `authenticated($h)`: authenticate → role → CSRF (non-GET/HEAD/OPTIONS). The handler receives a freshly reloaded `User` |
+| `app/bootstrap.php` | `$container['authorization']`, `$container['guard']` |
+| `tests/Auth/HttpSupport.php` | Optional router-script and seed-rows parameters; `login($email)`. Existing callers unchanged |
+| `tests/Auth/AuthorizationTest.php`, `AuthorizationHttpTest.php`, `fixtures/rbac_router.php` | 13 new tests (unit + real-HTTP probe router, test-only) |
+| `README.md` | RBAC usage, ownership rule, unguarded-route rule, no state changes on safe methods |
+
+`app/Core` was not changed. The unguarded-route test reads the router's routes by reflection.
+
+### Results (actual)
+- `php tests/run.php`: **62 passed, 0 failed** (49 previous + 13 T-02).
+- `php -l`: 49 files, 0 failures. Apache check: PASS (both document roots).
+- Mutation checks (each reverted, files confirmed restored):
+  - admin made a superuser → 4 tests fail
+  - CSRF check removed → 15 fail
+  - CSRF checked before role → 1 fails
+  - an unguarded route added to `routes/students.php` → the guard-coverage test fails
+- No database, schema or SQL. No runtime data created in the project or in `C:/ais-runtime`.

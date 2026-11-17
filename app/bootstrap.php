@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 use App\Auth\Controllers\AuthController;
+use App\Auth\Middleware\RouteGuard;
+use App\Auth\Services\AuthorizationService;
 use App\Auth\Repositories\MockUserRepository;
 use App\Auth\Services\AuthService;
 use App\Auth\Services\LoginRateLimiter;
@@ -38,6 +40,9 @@ $container['auth'] = new AuthService(
     $container['session'],
     new LoginRateLimiter(new JsonStore($runtime . '/auth/login-attempts.json'))
 );
+// Team 2 — RBAC (T-02). Modules protect routes with $container['guard']->roles([...], $handler).
+$container['authorization'] = new AuthorizationService();
+$container['guard'] = new RouteGuard($container['auth'], $container['authorization'], $container['session']);
 // REMOTE_ADDR only: forwarded headers are client-controlled and ignored.
 $container['auth_controller'] = new AuthController(
     $container['auth'],
