@@ -4,11 +4,12 @@ declare(strict_types=1);
 namespace App\Auth\Repositories;
 
 use App\Auth\Models\User;
+use App\Core\HttpException;
 use App\Core\JsonStore;
 use RuntimeException;
 
 /** Development-only storage; no schema or production persistence assumptions. */
-final class MockUserRepository implements UserRepositoryInterface
+final class MockUserRepository implements UserAdminRepositoryInterface
 {
     public function __construct(private readonly JsonStore $store)
     {
@@ -33,6 +34,57 @@ final class MockUserRepository implements UserRepositoryInterface
             }
         }
         return null;
+    }
+
+    public function search(string $emailContains, int $page, int $perPage): array
+    {
+        $needle = strtolower(trim($emailContains));
+        $matches = array_values(array_filter(
+            $this->users($this->store->read()),
+            static fn (User $user): bool => $needle === '' || str_contains($user->email, $needle)
+        ));
+        usort($matches, static fn (User $a, User $b): int => $a->id <=> $b->id);
+        return ['users' => array_slice($matches, ($page - 1) * $perPage, $perPage), 'total' => count($matches)];
+    }
+
+    /**
+     * One exclusive JsonStore transaction: users and audit live in the same file, so a change
+     * and its audit entry commit together or not at all, and concurrent writers serialize.
+     */
+    public function transaction(callable $operation): mixed
+    {
+        return $this->store->transaction(function (array &$data) use ($operation): mixed {
+            $before = $this->activeAdmins($this->users($data));
+            $audit = $data['audit'] ?? [];
+            if (!is_array($audit) || !array_is_list($audit)) {
+                throw new RuntimeException('Invalid audit store.');
+            }
+            $transaction = new MockUserTransaction($data['users'] ?? [], $audit);
+            $result = $operation($transaction);
+            [$rows, $audit] = $transaction->state();
+            // Invariant enforced here, under the lock, whatever the caller did.
+            if ($before > 0 && $this->activeAdmins($this->users(['users' => $rows])) === 0) {
+                throw new HttpException(409, self::LAST_ADMIN_MESSAGE);
+            }
+            $data['users'] = $rows;
+            $data['audit'] = $audit;
+            return $result;
+        });
+    }
+
+    public function auditEntries(): array
+    {
+        $audit = $this->store->read()['audit'] ?? [];
+        if (!is_array($audit) || !array_is_list($audit)) {
+            throw new RuntimeException('Invalid audit store.');
+        }
+        return $audit;
+    }
+
+    private function activeAdmins(array $users): int
+    {
+        return count(array_filter($users, static fn (User $user): bool
+            => $user->status === 'active' && in_array('admin', $user->roles, true)));
     }
 
     /** Used only by the explicit development CLI seeder. Never overwrites users. */
