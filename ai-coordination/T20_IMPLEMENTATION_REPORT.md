@@ -222,3 +222,38 @@ T-20 is conditionally approved, pending policy alignment and an independent revi
 **Not done for this change:**
 - Claude's own security-reviewer wasn't re-run for this delta. AGY's independent review covers it.
 - Two older tests were loosened while the bug was open. The new regression test now asserts the exact behaviour.
+
+## 12. Independent review and post-review integration check (2026-11-17)
+
+**Independent review:**
+- **Reviewer:** Codex, temporarily replacing AGY (which is unavailable because of its usage limit).
+- **Report:** `ai-coordination/CODEX_REVIEW_REPORT.md`.
+- **Verdict:** **APPROVE** on `60ac236`, range `592d912..60ac236`.
+- **Findings:** no security, correctness or integration defects. No merge blockers.
+- **Independence:** disclosed. Codex wrote phase 1 (`b04fec4`).
+- **Environment:** Codex reviewed in the shared worktree rather than a separate one. Its test runs used isolated runtime directories, and it made no checkout or source edit.
+
+**Commit reviewed vs head:**
+- `60ac236..6bec6e6` changes only `ai-coordination/*.md`, and the last code change is `0624eb7`.
+- The approval therefore covers all code on the branch.
+
+**Re-verified by Claude at the head (2026-11-17):**
+
+| Check | Result |
+|---|---|
+| `php tests/run.php` | 163 passed, 0 failed, including the 5 delivery-mode tests |
+| `php -l` | 104 files, 0 failures |
+| Apache check | PASS, public and repository document roots |
+| TBA / online asynchronous sections | implemented (`0624eb7`) and covered by tests |
+| Working tree | clean after committing Codex's report unchanged, together with these status updates |
+
+**Limitations Codex listed (all already documented, none blocking):**
+- Stores written before `delivery_mode`, without the field, fail closed.
+- The seeder can partly seed if it fails midway; it reports this.
+- Course codes are checked for format only (D1).
+- Whole-store reads on every request.
+- L-3 in Core.
+
+**Ahead of deployment:** check that no environment holds an enrollment store written by `b04fec4` or `909a000`.
+
+**Result:** READY_FOR_MERGE, awaiting owner merge approval.

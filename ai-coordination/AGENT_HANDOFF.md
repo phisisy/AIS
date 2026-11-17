@@ -4,7 +4,9 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
-## T-20 — Terms & Sections → CODEX independent review (prepared by Claude, 2026-11-17) — CURRENT
+## T-20 — Terms & Sections → CODEX independent review (prepared by Claude, 2026-11-17) — REVIEWED
+
+> **Outcome:** Codex APPROVE on `60ac236` (`CODEX_REVIEW_REPORT.md`). `60ac236..6bec6e6` changes only `ai-coordination/*.md`. The post-review integration check passed (see `T20_IMPLEMENTATION_REPORT.md` §12).
 
 - **Status:** READY_FOR_CODEX_REVIEW.
   - The reviewer was reassigned from AGY (`UNAVAILABLE_USAGE_LIMIT`) to Codex by the owner.

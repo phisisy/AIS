@@ -18,9 +18,9 @@ The scope and approval of each task are kept in `TASK_BOARD.md`. This file recor
   - `docs/plans/T-20-terms-sections.md`
   - `README.md` (Enrollment section)
   - `ai-coordination/T20_IMPLEMENTATION_REPORT.md`
-- **Status:** READY_FOR_CODEX_REVIEW (owner decisions Q1–Q7 applied; see the current handoff in `AGENT_HANDOFF.md`). Not started: Codex hasn't confirmed.
+- **Status:** READY_FOR_MERGE, awaiting owner approval. Codex review: **APPROVE** on `60ac236` (`CODEX_REVIEW_REPORT.md`). `60ac236..HEAD` changes only `ai-coordination/*.md`; the last code change is `0624eb7`.
 - **Dependencies:** T-02 ✔, B-04 ✔ (resolved by the owner)
-- **Approval status:** implementation APPROVED; conditionally approved pending policy alignment (done) and the independent review (now Codex). Merge NOT approved.
+- **Approval status:** implementation APPROVED; policy alignment done; independent review APPROVE. Merge NOT yet approved by the owner.
 
 ## T-11a — Academic Records (Team 3)
 
