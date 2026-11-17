@@ -263,6 +263,39 @@ malformed answers from that source also deny. Faculty can't list or modify profi
 Development data (after `dev_users.php`): `php database/seeders/dev_students.php`
 creates 3 fictional programs and a profile for `student@example.test`.
 
+## Academic records (Team 3, T-11a)
+
+| Method | Path | Who | Notes |
+|---|---|---|---|
+| GET | `/api/students/{id}/academic-record` | registrar, admin (any); student (own, while holding `student`) | Anything else is 404, the same as a missing record. Faculty are refused (403) |
+| GET | `/api/students/me/academic-record` | student | Own record; 404 if no profile |
+| GET | `/api/programs` | any signed-in user | Read-only program catalog, sorted by code |
+
+Record query: `?page=` (default 1) and `?per_page=` (default 50, max 100) for history.
+Response `data.academic_record`:
+- `student`: id, student number, full name, program code and name, year level, academic status, admission year.
+- `history`: entries `{seq, at, field, from, to}` plus pagination. Registrar and admin also see `actor_id` (who made the change); students don't.
+- `enrollment_summary` / `grades_summary`: `{"available": false}` until Teams 4 and 5 provide verified count sources (T-11b). Counts are never invented.
+
+History records changes to `program_code`, `year_level` and `academic_status`
+(including the initial values at creation). Each entry is written in the same
+locked write as the profile change, it is never truncated, and it is kept when the
+account is deactivated or loses `student`. Name and admission-year corrections are
+not academic history.
+
+History has no size cap (owner decision D4): every valid entry is kept and an
+update is never refused because of how many entries exist. Only responses are
+paginated. Storage limitation: the file-backed mock store reads and validates
+the whole `students.json` (all profiles and all history) on every request, so
+reads and writes get slower as history grows. That is acceptable for development.
+Production storage waits for Team 6's approved schema (T-40).
+
+For Teams 4 and 5 there is an in-process `StudentDirectory` (`$container['student_directory']`),
+with no HTTP route. It offers `findById`, `findByUserId` (summary fields only) and
+`isEnrollmentEligible()`. That returns Team 3's part of eligibility: academic
+status `active`, and an active account holding `student`. Team 4 enforces every
+other enrollment requirement.
+
 ## Core interfaces
 
 - `app/bootstrap.php` returns an explicit array container with `config`,

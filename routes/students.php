@@ -14,4 +14,10 @@ return static function (Router $router, array $container): void {
     $router->add('GET', '/api/students/me', $guard->roles(['student'], [$controller, 'me']));
     $router->add('GET', '/api/students/{id}', $guard->roles([...$staff, 'student', 'faculty'], [$controller, 'show']));
     $router->add('PATCH', '/api/students/{id}', $guard->roles($staff, [$controller, 'update']));
+
+    // T-11a academic records (no faculty access) and the read-only program catalog.
+    $records = $container['academic_record_controller'];
+    $router->add('GET', '/api/students/me/academic-record', $guard->roles(['student'], [$records, 'me']));
+    $router->add('GET', '/api/students/{id}/academic-record', $guard->roles([...$staff, 'student'], [$records, 'show']));
+    $router->add('GET', '/api/programs', $guard->authenticated([$records, 'programs']));
 };

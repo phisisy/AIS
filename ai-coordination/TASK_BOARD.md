@@ -17,7 +17,8 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-04 | 2 | Security-event logging for refused admin-route access | T-03 ✔ | VERIFIED (merged `c280aa7`) |
 | T-05 | 2 | Read-only audit-log endpoint | T-03 ✔ | PROPOSED (planning approved; not to be built yet) |
 | T-10 | 3 | Student profiles | T-02 ✔, B-07 ✔ | VERIFIED (merged `07b4c83`; see `T10_IMPLEMENTATION_REPORT.md`) |
-| T-11 | 3 | Academic records + StudentDirectory | T-10 ✔ | PROPOSED (planning: `PROPOSAL_T11_ACADEMIC_RECORDS.md`; scope awaits owner approval) |
+| T-11a | 3 | Academic records + StudentDirectory | T-10 ✔ | READY_FOR_REVIEW (APPROVED by owner 2026-11-17; committed `0b91668` on `task/T-11a-academic-records`, not merged; see `T11A_IMPLEMENTATION_REPORT.md`) |
+| T-11b | 3 | Course catalog, curriculum, real enrollment/grade summaries | T-11a, D1, T-22, T-32 | PROPOSED (not approved) |
 | T-06 | 2 | Protected admin registry + owner-only recovery CLI | T-03 ✔ | PROPOSED (design conditionally approved; `PROPOSAL_ADMIN_PROTECTION_RECOVERY.md` v2; implementation not approved) |
 | T-20 | 4 | Terms & sections catalog | T-02 | PROPOSED |
 | T-21 | 4 | SectionDirectory + InstructorLookup interface | T-20, B-04 | PROPOSED |
@@ -136,7 +137,9 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 - **Dependencies:** T-10, B-07
 - **Acceptance criteria:** `/api/students/{id}/academic-record` respects the same ownership rules. It contains no grades or enrollment copies. `StudentDirectory` returns summaries only (no private fields beyond the contract).
 - **Required tests:** academic record ownership, StudentDirectory unit tests (found, not found, by user ID).
-- **Status:** PROPOSED
+- **Owner decisions (2026-11-17):** scope split D5. **T-11a APPROVED**: academic record retrieval (staff, self), faculty refused, academic change history written atomically with profile updates, read-only `/api/programs`, in-process `StudentDirectory`, explicit unavailable enrollment/grade summaries, tests. D4: **no history cap**, paginated responses. T-11b not approved.
+- **Extra files (T-11a):** `app/bootstrap.php` (Students wiring), `README.md`, `ai-coordination/API_CONTRACTS.md`, `ai-coordination/PROPOSAL_T11_ACADEMIC_RECORDS.md`, `ai-coordination/T11A_IMPLEMENTATION_REPORT.md`.
+- **Status:** T-11a READY_FOR_REVIEW (124/124 tests, lint clean, Apache PASS; security review: no Critical/High/Medium, one Low fixed, one Low resolved by D4). Awaiting independent review and owner merge approval. T-11b PROPOSED.
 
 ### T-20 — Terms & sections catalog
 - **Team:** 4

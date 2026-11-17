@@ -1,6 +1,6 @@
 # T-11 proposal — Academic Records (Team 3)
 
-Status: **PROPOSED, planning only. Not implemented.** The exact scope needs owner approval. Date: 2026-11-17. Base: `main` `07b4c83`.
+Status: **T-11a APPROVED and implemented** (owner, 2026-11-17; see `T11A_IMPLEMENTATION_REPORT.md`). T-11b (course catalog, curriculum, real summaries) is not approved. D4 was decided as **no cap**. Date: 2026-11-17. Base: `main` `07b4c83`.
 
 ## 1. What exists today (T-10, inspected)
 
@@ -53,7 +53,7 @@ Status: **PROPOSED, planning only. Not implemented.** The exact scope needs owne
 | GET | `/api/programs` | any signed-in user | `{programs:[{code,name,max_year_level}]}`. Read-only |
 
 - **Errors:** as T-10 (401, 403, 404; 500 generic).
-- **Pagination:** history is returned in full, oldest first; it's bounded by the number of academic changes, which is small per student. A cap of 500 entries is enforced at write time. **Owner decision D4** if more is expected.
+- **Pagination:** history is returned oldest first and paginated (`?page=` 1–1,000,000, default 1; `?per_page=` 1–100, default 50; invalid values → 422). **D4 (owner decision): no cap.** Every valid entry is kept, history is never truncated, and an update is never refused because of the history size. The file-backed mock store reads the whole file on each request, so cost grows with total history (see README).
 - **Not proposed:** program or course management endpoints (catalog writes stay seeder-only until Team 6), and any write endpoint for history. History is written only as a side effect of T-10 profile updates.
 
 ## 5. Cross-team interface: `StudentDirectory` (Team 3 provides, Teams 4 and 5 consume)
@@ -129,5 +129,5 @@ final class StudentSummary   // read-only value object
 | D1 | Who owns the course/subject catalog and curriculum? | Team 3 owns the **catalog** (code, title, units) because programs live here. Team 4 references `course_code` from it. Curriculum mapping (program × year × term → courses) is **deferred** to a separate task once Team 4's needs are known |
 | D2 | Which academic statuses allow enrollment? | Only `active`. `on_leave`, `inactive`, `graduated` and `transferred` are not eligible |
 | D3 | What do the enrollment and grade summaries contain once Teams 4 and 5 exist? | Term-level counts only (enrolled sections, finalized courses, units). No copied rows. Defined when T-22/T-32 land |
-| D4 | History retention and cap | Keep all (500 per student cap); never deleted with account changes (consistent with decision 3) |
+| D4 | History retention and cap | **Decided (owner): no cap.** Keep every entry; never truncate; never deleted with account changes (consistent with decision 3); responses paginated |
 | D5 | Scope split | **T-11a** (now): history, academic-record endpoints, `/api/programs`, `StudentDirectory`. **T-11b** (later): course catalog and curriculum after D1 |
