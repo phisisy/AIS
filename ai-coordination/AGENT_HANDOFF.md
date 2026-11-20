@@ -4,6 +4,82 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
+## T-21 → AGY independent review (prepared by Claude, 2026-11-20) — READY_FOR_AGY_REVIEW, not started
+
+- **Branch:** `task/T-21-instructor-assignments`
+- **Exact review target:** the head of that branch at the commit that adds this section. Report the full hash.
+  - Last code commit: **`e92f328`** (phase 3). Everything after it changes only `ai-coordination/*.md`.
+  - **Review range:** `229618b..<head>`, where `229618b` is `main`.
+  - If code changes after your review, the review has to be repeated.
+- **Spec:** `docs/plans/T-21-instructor-assignments.md`, approved at `ce47dae`: §1.1 owner additions, A1–A14, §3–§10.
+- **Owner decisions:**
+  - Q1–Q4.
+  - **DELETE response:** removal never depends on identity verification or name lookup. Remaining names are resolved after the removal commits, and a lookup failure gives `null` without rolling back.
+- **Commits:**
+
+| Commit | Author | What |
+|---|---|---|
+| `ce47dae` | Claude | approved plan; contracts in `app/Enrollment/Contracts/` (`FacultyIdentity`, `FacultyIdentityLookup`, `UnavailableFacultyIdentity`, `SectionSummary`, `SectionDirectory`); B-11 |
+| `c810188` | Claude | Codex handoff |
+| `99c92b6` | Codex (committed by Claude*) | phase 2: model, repository, services, `RepositorySectionDirectory`, controller, tests, implementation report |
+| `cc1dbf5` | Codex (committed by Claude*) | DELETE names per the owner decision, plus 3 regression tests |
+| `ab251da` | Claude | merge of `task/T-21-impl` |
+| `e92f328` | Claude | phase 3: bootstrap (explicit `UnavailableFacultyIdentity`), the 2 routes, README, `API_CONTRACTS.md`, the comment-only fix in `FacultyStudentVisibility.php` |
+
+\* Codex's sandbox can't write a linked worktree's git metadata. Claude committed Codex's changes unedited, after confirming Codex had exited, reviewing the changes, checking scope and running the suite (owner policy, 2026-11-20).
+
+### Verified by Claude at `e92f328` (2026-11-20)
+
+| Check | Result |
+|---|---|
+| `php tests/run.php` | **183 passed, 0 failed.** The 4 phase-2 expected failures are resolved by the wiring, with no assertion changed. |
+| `php -l` | 115 files, 0 failures |
+| `tests/Core/apache_check.php` | PASS, public and repository document roots |
+| Real DELETE through private XAMPP Apache, both document roots, real session + CSRF (one-off probe, not committed) | anonymous 401; no CSRF 403; unassigned pair 404 "Instructor assignment not found."; missing section 404; production assign 422 "Unknown or inactive faculty member."; `instructors` `[]`; `PUT` 405 |
+| Successful DELETE 200 | Not possible in production, where nobody can be assigned. Covered over real HTTP (PHP server) by Codex's seeded-store test `Assignment HTTP: reads expose instructors and seeded DELETE audits once` |
+| Concurrency C6–C10 | pass within the suite (Codex: 3 rounds each) |
+| Mutation checks M9–M20 | **12/12 killed**, run by Codex in a scratch copy with phase-3 wiring simulated. **Not re-run by Claude.** M17 survived at first; Codex strengthened the matrix so a denied role gets 403 before body validation, and it was killed on rerun. See `T21_IMPLEMENTATION_REPORT.md`. |
+
+### Claude's review of `99c92b6` and `cc1dbf5` (summary)
+
+- **Scope:** only Codex's assigned files. Contracts, bootstrap, routes, Students and Core untouched.
+- **Authorization:** guard (registrar/admin + CSRF) plus `requireRole` in the service. The body allowlist is `faculty_id` only, and DELETE refuses any body field.
+- **Identity:** checked before the lock (A4). Null, inactive, a mismatch or a `Throwable` all give the same 422 (A8). Unassign never calls `find()`.
+- **Conflicts:** one helper for assign and section PATCH. Same term, same day, `a.start < b.end && b.start < a.end`. Every meeting counts, whatever the mode (Q1). The 409 names only the clashing section.
+- **Atomicity:** the existence, duplicate, cap (5), conflict and history-append steps all happen in one `JsonStore` transaction.
+- **Snapshot:** validates both new keys (exact shapes, known sections, no duplicates, at most 5, no stored conflict), checks that history `seq` is gap-free, and replays history against `assignments`. T-20 stores load unchanged.
+- **A14:** `isAssigned` and `sectionIdsForFaculty` require a confirmed active identity; `assignedFacultyIds` isn't filtered.
+- **T-20 tests:** the exact-response tests now assert the full key order **and** `instructors === []`. They're stricter, not weaker.
+- **Findings:** none blocking. The only change was the DELETE names, required by the owner's decision.
+
+### Focus areas for AGY
+
+1. **RBAC and CSRF** on the two new routes; the service-level `requireRole`; faculty and students can't assign or unassign.
+2. **Production fail-closed:** the only `FacultyIdentityLookup` in `app/` is `UnavailableFacultyIdentity`; the stub lives under `tests/` only; nothing selects a lookup by config or env.
+3. **Conflict detection:** correctness and atomicity (C6, C9), the PATCH re-check, cross-term and back-to-back cases, and meetings of `tba` and `online_async` sections counting.
+4. **Audit history:** append-only, gap-free, exactly one entry per success, none on failure; replay validation.
+5. **Corrupt store handling:** a generic 500, nothing written.
+6. **A14:** retained assignments of inactive faculty grant no access.
+7. **DELETE:** never blocked by identity or name lookup.
+8. **API compatibility with T-20** (only the additive `instructors` key) and T-00 to T-20 regression.
+
+### Known limitations (documented)
+
+- **Production assigns nothing until T-30.** That's by design.
+- **B-11** (user id ↔ `faculty_id`) blocks T-31.
+- **The A4 window:** the identity is checked before the lock, so a faculty member deactivated in those milliseconds could still be assigned.
+- Replay and conflict validation scale linearly with store size (until T-40).
+- L-3 (Core error keys).
+- DELETE 200 is covered only with a seeded store.
+
+### Review request
+
+- Read-only review in a separate worktree, for example `git worktree add ..\AIS_REVIEW_T21 <head>`. Use your own `APP_RUNTIME_PATH`, and coordinate with Claude before running the Apache check.
+- Write the report to `ai-coordination/AGY_REVIEW_REPORT.md`, with the exact commit and a verdict.
+- Claude has no channel to AGY; the owner starts it.
+
+---
+
 ## T-21 phase 2 → CODEX implementation (prepared by Claude, 2026-11-20) — ASSIGNED, not confirmed
 
 - **Owner authorization:** T-21 implementation approved on 2026-11-20. Codex implements the backend and the tests.

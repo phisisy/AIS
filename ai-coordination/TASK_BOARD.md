@@ -21,7 +21,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-11b | 3 | Course catalog, curriculum, real enrollment/grade summaries | T-11a, D1, T-22, T-32 | PROPOSED (not approved) |
 | T-06 | 2 | Protected admin registry + owner-only recovery CLI | T-03 ✔ | PROPOSED (design conditionally approved; `PROPOSAL_ADMIN_PROTECTION_RECOVERY.md` v2; implementation not approved) |
 | T-20 | 4 | Terms & sections catalog | T-02 ✔ | **MERGED** into `main` as `8c2b980` (2026-11-20). AGY APPROVE on `81097d5`, Codex APPROVE on `60ac236`; 163/163 tests, 104/104 lint, Apache PASS on `main`. Not pushed. See `T20_IMPLEMENTATION_REPORT.md` §13 |
-| T-21 | 4 | SectionDirectory, faculty identity port, instructor assignments | T-20 ✔, B-04 ✔ | IN_PROGRESS (APPROVED by owner 2026-11-20; plan `docs/plans/T-21-instructor-assignments.md`; branches `task/T-21-instructor-assignments` (Claude) and `task/T-21-impl` (Codex)) |
+| T-21 | 4 | SectionDirectory, faculty identity port, instructor assignments | T-20 ✔, B-04 ✔ | READY_FOR_AGY_REVIEW (last code commit `e92f328` on `task/T-21-instructor-assignments`; 183/183 tests, 115/115 lint, Apache PASS including real DELETE; not merged; handoff: `AGENT_HANDOFF.md`) |
 | T-22 | 4 | Enrollment requests, approval & schedule | T-11, T-21 | PROPOSED |
 | T-30 | 5 | Faculty profiles + FacultyIdentityLookup | T-21, B-04 ✔ | PROPOSED (assignments moved to Team 4 by B-04) |
 | T-31 | 5 | Class rosters | T-22, T-30 | PROPOSED |
@@ -177,7 +177,7 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
   - Test doubles only under `tests/`.
   - T-20 exact-response tests updated without weakening them. Backward-compatible store loading.
 - **Required tests:** plan §9: unit, directory, store, HTTP matrix, concurrency C6–C10, production fail-closed, mutations M9–M20.
-- **Status:** IN_PROGRESS. Phase 1 (contracts, Claude) done; phase 2 (Codex) assigned, not confirmed.
+- **Status:** READY_FOR_AGY_REVIEW. Phases 1–3 integrated (`e92f328`). Codex mutation checks M9–M20 12/12 killed. Awaiting AGY review, then owner merge approval.
 
 ### T-22 — Enrollment requests, approval & schedule
 - **Team:** 4

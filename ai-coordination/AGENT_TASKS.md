@@ -32,7 +32,7 @@ The scope and approval of each task are kept in `TASK_BOARD.md`. This file recor
   - Codex: `task/T-21-impl` in `..\AIS_CODEX_T21`, from Claude's phase-1 commit.
   - AGY: read-only `..\AIS_REVIEW_T21` at the handoff commit, created later.
 - **Dependencies:** T-20 ✔, B-04 ✔. T-30 for real identities. B-11 for T-31.
-- **Status:** phase 1 done (Claude). Phase 2 assigned to Codex; not started until Codex confirms.
+- **Status:** phases 1–3 done (Claude `ce47dae`; Codex `99c92b6` and `cc1dbf5`, committed by Claude; merge `ab251da`; phase 3 `e92f328`). **READY_FOR_AGY_REVIEW** (phase 4). Codex files released unless AGY finds issues in them.
 
 | Phase | Agent | Files (locked to that agent during the phase) |
 |---|---|---|
