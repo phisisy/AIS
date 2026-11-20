@@ -4,6 +4,80 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
+## T-21 phase 2 → CODEX implementation (prepared by Claude, 2026-11-20) — ASSIGNED, not confirmed
+
+- **Owner authorization:** T-21 implementation approved on 2026-11-20. Codex implements the backend and the tests.
+- **Spec (authoritative):** `docs/plans/T-21-instructor-assignments.md`, approved revision at `ce47dae`. Follow §1.1, §2 (A1–A14), §3–§7, §9 and §12 exactly.
+- **Baseline:** branch `task/T-21-instructor-assignments` at the commit that adds this handoff. Its code is identical to phase-1 commit `ce47dae`, which contains Claude's contracts in `app/Enrollment/Contracts/`. `main` is at `229618b`.
+- **Your branch and worktree:** `task/T-21-impl` in `..\AIS_CODEX_T21`. Claude creates both from that commit. Work and commit only there.
+
+### Files you own (phase 2; plan §12) — edit nothing else
+
+- `app/Enrollment/Models/Section.php`
+- `app/Enrollment/Repositories/CatalogRepositoryInterface.php`
+- `app/Enrollment/Repositories/MockCatalogRepository.php`
+- `app/Enrollment/Services/SectionService.php`
+- `app/Enrollment/Services/RepositorySectionDirectory.php` (new)
+- `app/Enrollment/Controllers/SectionController.php`
+- `tests/Enrollment/**`: the existing files, plus the new `AssignmentServiceTest.php`, `SectionDirectoryTest.php`, `AssignmentHttpTest.php`, `FacultyIdentityPortTest.php` and `fixtures/StubFacultyIdentity.php`
+- `ai-coordination/T21_IMPLEMENTATION_REPORT.md` (new)
+
+### Files you must not touch
+
+- `app/Enrollment/Contracts/*`. These are Claude's. If a contract change is needed, stop and report.
+- `app/bootstrap.php`, `routes/enrollment.php`, `README.md`, `app/Students/**`, `app/Core/**`, `app/Auth/**`, `database/**`.
+- `ai-coordination/*` except your report, and `docs/**`.
+- Any other agent's worktree.
+
+Bootstrap and routes wiring is Claude's phase 3. Until then:
+- `SectionService` takes the optional `?FacultyIdentityLookup` as its third argument. `null` means `UnavailableFacultyIdentity`.
+- `RepositorySectionDirectory` takes `(CatalogRepositoryInterface, FacultyIdentityLookup)`.
+
+### Binding requirements
+
+1. **Ownership:** Team 4 owns the assignments. Store only `{section_id, faculty_id}`, with no faculty data copied. Names come from `FacultyIdentityLookup::findMany` at read time; if it fails, `name` is `null` (A9).
+2. **Fail closed in production:** with `UnavailableFacultyIdentity`, every assign gets 422 and nothing is written. Test doubles exist **only** under `tests/`; never in `app/`, never selected by config or env.
+3. **Identity refusal:** null, inactive, an id mismatch or any `Throwable` all give 422 `{faculty_id: "Unknown or inactive faculty member."}` (A8). The lookup runs before the lock (A4). Unassign never calls the lookup (A7).
+4. **Conflict rule:** same `term_id`, any overlapping meeting (same day, `a.start < b.end && b.start < a.end`) gives **409**. Every actual meeting counts, including those of `tba` and `online_async` sections (Q1). Sections with no meetings never conflict. The 409 names only the clashing section.
+   - The check runs atomically in the single store lock, as one helper shared by `assignInstructor` and `updateSection` (A3, A5).
+   - A section PATCH that would create a conflict gives 409 and writes nothing.
+5. **Cap and duplicates:** at most 5 instructors per section; a 6th gives 409. A duplicate pair gives 409.
+6. **Audit:** the append-only `assignment_history` (`seq` gap-free, with `at`, `action`, `section_id`, `faculty_id`, `actor_id`) is written in the same transaction. Failures write nothing.
+7. **Store:**
+   - New top-level keys `assignments` and `assignment_history`. If they're missing, they're empty, so T-20 stores load unchanged.
+   - Validation fails closed on: an unknown section, a duplicate, more than 5, a stored conflict, malformed history, or a history replay that doesn't match `assignments` (A11).
+8. **Inactive faculty (Q4, A14):**
+   - Retained assignments and history are kept and shown.
+   - New assignments to inactive faculty are refused.
+   - `RepositorySectionDirectory::isAssigned` and `sectionIdsForFaculty` count an assignment only when `find()` returns an active identity with the same id, and fail closed otherwise. `assignedFacultyIds` isn't filtered.
+9. **Authorization:** registrar/admin only (the guard is wired in phase 3), plus `requireRole` in the service. Section reads stay open to any signed-in user.
+10. **T-20 tests:** update the exact-response tests for the new `instructors` key **without weakening them**: keep exact key order and value equality, and don't relax anything to a subset. Grep `tests/Enrollment/` for every exact section-shape assertion.
+11. **No schema or DB changes.** No T-22, T-30 or T-31 work. `approvedStudentIds` returns `[]` with the `shortcut:` comment.
+
+### Required tests and checks (plan §9)
+
+- Unit tests (§9.1), directory tests including A14 (§9.2), store tests (§9.3), and the HTTP tests (§9.4).
+- Concurrency races C6–C10 with worker processes (§9.5).
+- The production fail-closed test and the source-scan test (§9.6).
+- Mutation checks M9–M20 (§9.7), in a scratch copy **outside every worktree**.
+- Run `php tests/run.php` (all 163 existing tests must still pass) and `php -l` on every PHP file.
+- **Expected red until phase 3:** the HTTP route tests (§9.4) and the production-wiring test (§9.6) need Claude's bootstrap and routes wiring. List each one by name in your report. Everything else must be green.
+- **Runtime:** set `APP_RUNTIME_PATH` to a scratch folder outside all worktrees and outside OneDrive. Don't run the Apache check; Claude runs it in phase 3.
+
+### Deliverables
+
+- Commit on `task/T-21-impl`. Commits only there; no merge, no push, no history rewriting.
+- Write `ai-coordination/T21_IMPLEMENTATION_REPORT.md`, covering:
+  - files changed and any deviations from the plan, with the reason
+  - test counts (pass, fail, and the expected-red list)
+  - the `php -l` result
+  - mutation results
+  - risks
+  - the exact commit hash
+- Then stop. Claude reviews and integrates. AGY reviews after phase 3.
+
+---
+
 ## T-20 — MANDATORY AGY review before merge (owner decision, 2026-11-20) — REVIEWED, MERGED
 
 > **Outcome:** AGY APPROVE on `81097d5` (`AGY_REVIEW_REPORT.md`). Merged into `main` as `8c2b980` on 2026-11-20. Not pushed.
