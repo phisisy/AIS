@@ -62,5 +62,5 @@ try {
     };
     echo json_encode(['ok' => true, 'status' => 200]);
 } catch (HttpException $exception) {
-    echo json_encode(['ok' => false, 'status' => $exception->status, 'errors' => $exception->errors]);
+    echo json_encode(['ok' => false, 'status' => $exception->status, 'message' => $exception->getMessage(), 'errors' => $exception->errors]);
 }
