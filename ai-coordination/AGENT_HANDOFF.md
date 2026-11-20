@@ -4,7 +4,14 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
-## T-21 → AGY independent review (prepared by Claude, 2026-11-20) — READY_FOR_AGY_REVIEW, not started
+## T-21 → independent review (prepared by Claude, 2026-11-20) — REASSIGNED to a fresh CODEX review session
+
+> **Reviewer change (owner, 2026-11-20):**
+> - **AGY** was assigned first. It hasn't started and is now `UNAVAILABLE_USAGE_LIMIT`.
+> - **Replacement:** the owner assigned a **fresh Codex review session** in the separate worktree `..\AIS_REVIEW_T21`, detached at `54d1a6b`.
+> - **Report file:** `ai-coordination/CODEX_REVIEW_REPORT.md`. Add the newest report at the top and keep the T-20 report. `AGY_REVIEW_REPORT.md` stays as history.
+> - **Independence caveat:** Codex implemented T-21 phase 2 (`99c92b6`, `cc1dbf5`). A Codex review of that code isn't fully author-independent. The report must say so, and the owner decides whether it is enough.
+> - **Target:** this handoff's review target is `54d1a6b`. Later commits on the branch change only `ai-coordination/*.md`.
 
 - **Branch:** `task/T-21-instructor-assignments`
 - **Exact review target:** the head of that branch at the commit that adds this section. Report the full hash.

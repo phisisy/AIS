@@ -25,14 +25,15 @@ The scope and approval of each task are kept in `TASK_BOARD.md`. This file recor
 ## T-21 — SectionDirectory, faculty identity port, instructor assignments (Team 4)
 
 - **Task ID:** T-21
-- **Owner:** CLAUDE (lead: plan, contracts, integration, review). **Implementer:** CODEX. **Reviewer:** AGY.
+- **Owner:** CLAUDE (lead: plan, contracts, integration, review). **Implementer:** CODEX.
+- **Reviewer:** AGY was assigned first and never started. It became `UNAVAILABLE_USAGE_LIMIT` on 2026-11-20. **Replacement reviewer: a fresh CODEX review session** (owner, 2026-11-20), in `..\AIS_REVIEW_T21` at `54d1a6b`, reporting to `CODEX_REVIEW_REPORT.md`. Independence caveat: Codex implemented phase 2.
 - **Approval status:** implementation APPROVED (owner, 2026-11-20). Merge into `main` NOT approved.
 - **Branches and worktrees:**
   - Claude: `task/T-21-instructor-assignments` in `AIS_SYSTEM`, from `main` `229618b`.
   - Codex: `task/T-21-impl` in `..\AIS_CODEX_T21`, from Claude's phase-1 commit.
   - AGY: read-only `..\AIS_REVIEW_T21` at the handoff commit, created later.
 - **Dependencies:** T-20 ✔, B-04 ✔. T-30 for real identities. B-11 for T-31.
-- **Status:** phases 1–3 done (Claude `ce47dae`; Codex `99c92b6` and `cc1dbf5`, committed by Claude; merge `ab251da`; phase 3 `e92f328`). **READY_FOR_AGY_REVIEW** (phase 4). Codex files released unless AGY finds issues in them.
+- **Status:** phases 1–3 done (Claude `ce47dae`; Codex `99c92b6` and `cc1dbf5`, committed by Claude; merge `ab251da`; phase 3 `e92f328`). **Independent review in progress (Codex, replacing AGY)** (phase 4). Codex files released unless AGY finds issues in them.
 
 | Phase | Agent | Files (locked to that agent during the phase) |
 |---|---|---|
