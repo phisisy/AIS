@@ -138,7 +138,8 @@ test('Enrollment HTTP: unknown and immutable fields are 422, immutable data is u
         $created = $server->request('POST', '/api/registrar/sections', httpSectionBody(), $token);
         same(201, $created['status']);
         same(['id', 'term_id', 'course_code', 'course_title', 'units', 'section_code', 'capacity', 'approved_count', 'remaining', 'delivery_mode',
-            'meetings', 'created_at', 'updated_at'], array_keys($created['json']['data']['section']));
+            'meetings', 'instructors', 'created_at', 'updated_at'], array_keys($created['json']['data']['section']));
+        same([], $created['json']['data']['section']['instructors']);
         same('Section created.', $created['json']['message']);
         foreach ([['code' => 'NEW'], ['id' => 7], ['created_at' => 'x'], ['name' => 'ok', 'role' => 'admin']] as $body) {
             $r = $server->request('PATCH', '/api/registrar/terms/1', $body, $token);

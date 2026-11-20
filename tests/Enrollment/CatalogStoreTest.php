@@ -189,3 +189,69 @@ test('Catalog store: a write that cannot be committed leaves the store unchanged
         removeTestDirectory($directory);
     }
 });
+
+test('Catalog store: T-20 data loads and first assignment adds both keys', function (): void {
+    $dir = tempDirectory();
+    try {
+        [$terms, $sections, $repository, $users] = enrollmentFixture($dir, new StubFacultyIdentity([10 => ['name' => 'Ten', 'active' => true]]));
+        $actor = $users->findById(2);
+        $terms->create($actor, termInput());
+        $sections->create($actor, sectionInput());
+        $store = json_decode(storeBytes($dir), true, 512, JSON_THROW_ON_ERROR);
+        unset($store['assignments'], $store['assignment_history']);
+        writeEnrollmentStore($dir, json_encode($store, JSON_THROW_ON_ERROR));
+        same([], $repository->assignedFacultyIds([1])[1]);
+        $sections->assignInstructor($actor, 1, assignInput());
+        $stored = json_decode(storeBytes($dir), true, 512, JSON_THROW_ON_ERROR);
+        same([['section_id' => 1, 'faculty_id' => 10]], $stored['assignments']);
+        same(1, count($stored['assignment_history']));
+    } finally { removeTestDirectory($dir); }
+});
+
+test('Catalog store: corrupt assignments or history reject every read and write without changing bytes', function (): void {
+    $dir = tempDirectory();
+    try {
+        [$terms, $sections, $repository, $users] = enrollmentFixture($dir, new StubFacultyIdentity([10 => ['name' => 'Ten', 'active' => true]]));
+        $actor = $users->findById(2);
+        $terms->create($actor, termInput());
+        $sections->create($actor, sectionInput());
+        $sections->create($actor, sectionInput(['section_code' => 'B', 'meetings' => [meeting('MON', '09:30', '10:30')]]));
+        $sections->assignInstructor($actor, 1, assignInput());
+        $valid = json_decode(storeBytes($dir), true, 512, JSON_THROW_ON_ERROR);
+        $a = ['section_id' => 1, 'faculty_id' => 10];
+        $h = $valid['assignment_history'][0];
+        $cases = [
+            'assignments not list' => ['assignments' => ['x' => $a]],
+            'extra row key' => ['assignments' => [array_merge($a, ['name' => 'X'])]],
+            'missing row key' => ['assignments' => [['section_id' => 1]]],
+            'faculty string' => ['assignments' => [['section_id' => 1, 'faculty_id' => '10']]],
+            'unknown section' => ['assignments' => [['section_id' => 99, 'faculty_id' => 10]]],
+            'duplicate pair' => ['assignments' => [$a, $a]],
+            'sixth' => ['assignments' => array_map(static fn ($id) => ['section_id' => 1, 'faculty_id' => $id], range(10, 15))],
+            'stored conflict' => ['assignments' => [$a, ['section_id' => 2, 'faculty_id' => 10]],
+                'assignment_history' => [$h, array_replace($h, ['seq' => 2, 'section_id' => 2])]],
+            'history not list' => ['assignment_history' => ['x' => $h]],
+            'seq gap' => ['assignment_history' => [array_replace($h, ['seq' => 2])]],
+            'bad action' => ['assignment_history' => [array_replace($h, ['action' => 'edited'])]],
+            'actor zero' => ['assignment_history' => [array_replace($h, ['actor_id' => 0])]],
+            'bad at' => ['assignment_history' => [array_replace($h, ['at' => 'today'])]],
+            'orphan unassign' => ['assignment_history' => [array_replace($h, ['action' => 'unassigned'])]],
+            'assignment without history' => ['assignment_history' => []],
+            'history without assignment' => ['assignments' => []],
+            'unknown top level' => ['surprise' => true],
+        ];
+        foreach ($cases as $name => $changes) {
+            $bytes = json_encode(array_replace($valid, $changes), JSON_THROW_ON_ERROR);
+            writeEnrollmentStore($dir, $bytes);
+            foreach ([fn () => $repository->terms(), fn () => $repository->findSection(1),
+                fn () => $repository->assignedFacultyIds([1]), fn () => $repository->sectionIdsForFaculty(10),
+                fn () => $repository->createTerm(['code' => 'NEXT', 'name' => 'Next', 'start_date' => '2027-01-01', 'end_date' => '2027-02-01'], 'now'),
+                fn () => $repository->assignInstructor(1, 11, '2026-11-20T00:00:00Z', 2),
+                fn () => $repository->unassignInstructor(1, 10, '2026-11-20T00:00:00Z', 2)] as $action) {
+                $e = throws(RuntimeException::class, $action);
+                same('Invalid enrollment store.', $e->getMessage(), $name);
+                same($bytes, storeBytes($dir), $name);
+            }
+        }
+    } finally { removeTestDirectory($dir); }
+});

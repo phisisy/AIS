@@ -73,11 +73,19 @@ final class Section
     public function capacity(): int { return $this->row['capacity']; }
     public function approvedCount(): int { return $this->row['approved_count']; }
     public function deliveryMode(): string { return $this->row['delivery_mode']; }
+    public function meetings(): array { return $this->row['meetings']; }
 
     public function toArray(): array
     {
         return array_slice($this->row, 0, 8, true)
             + ['remaining' => $this->capacity() - $this->approvedCount()]
             + array_slice($this->row, 8, null, true);
+    }
+
+    /** @param list<array{faculty_id:int,name:?string}> $instructors */
+    public function withInstructors(array $instructors): array
+    {
+        $row = $this->toArray();
+        return array_slice($row, 0, 11, true) + ['instructors' => $instructors] + array_slice($row, 11, null, true);
     }
 }

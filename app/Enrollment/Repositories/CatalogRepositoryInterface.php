@@ -28,4 +28,16 @@ interface CatalogRepositoryInterface
 
     /** Mutable fields only; 404 if missing. $check runs on the merged row inside the lock before writing. */
     public function updateSection(int $id, array $changes, string $now, ?callable $check = null): Section;
+
+    /** @param list<int> $sectionIds @return array<int, list<int>> One read; ids in assignment order. */
+    public function assignedFacultyIds(array $sectionIds): array;
+
+    /** @return list<int> ascending */
+    public function sectionIdsForFaculty(int $facultyId): array;
+
+    /** @return array{section:Section,faculty_ids:list<int>} */
+    public function assignInstructor(int $sectionId, int $facultyId, string $now, int $actorId): array;
+
+    /** @return array{section:Section,faculty_ids:list<int>} */
+    public function unassignInstructor(int $sectionId, int $facultyId, string $now, int $actorId): array;
 }
