@@ -38,4 +38,17 @@ final class SectionController
         $section = $this->sections->update($actor, $params['id'], $request->json(self::UPDATE_FIELDS));
         return Response::success(['section' => $section], 'Section updated.');
     }
+
+    public function assignInstructor(Request $request, array $params, User $actor): Response
+    {
+        $section = $this->sections->assignInstructor($actor, $params['id'], $request->json(['faculty_id']));
+        return Response::success(['section' => $section], 'Instructor assigned.', 201);
+    }
+
+    public function unassignInstructor(Request $request, array $params, User $actor): Response
+    {
+        $request->json([]);
+        $section = $this->sections->unassignInstructor($actor, $params['id'], $params['facultyId']);
+        return Response::success(['section' => $section], 'Instructor unassigned.');
+    }
 }

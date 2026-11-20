@@ -18,9 +18,11 @@ use App\Core\Router;
 use App\Core\RuntimeDirectory;
 use App\Enrollment\Controllers\TermController;
 use App\Enrollment\Controllers\SectionController;
+use App\Enrollment\Contracts\UnavailableFacultyIdentity;
 use App\Enrollment\Repositories\MockCatalogRepository;
 use App\Enrollment\Services\TermService;
 use App\Enrollment\Services\SectionService;
+use App\Enrollment\Services\RepositorySectionDirectory;
 use App\Students\Contracts\DenyAllFacultyVisibility;
 use App\Students\Contracts\UnavailableSummarySource;
 use App\Students\Controllers\AcademicRecordController;
@@ -95,7 +97,12 @@ $container['student_directory'] = new RepositoryStudentDirectory($container['stu
 // Team 4: terms and sections (T-20). One store shares the lock; T-22 adds enrollments here.
 $container['enrollment_catalog'] = new MockCatalogRepository(new JsonStore($runtime . '/enrollment/enrollment.json'));
 $container['term_controller'] = new TermController(new TermService($container['enrollment_catalog'], $container['authorization']));
-$container['section_controller'] = new SectionController(new SectionService($container['enrollment_catalog'], $container['authorization']));
+// Team 4: instructor assignments (T-21). Verifies nobody until T-30 binds Team 5's lookup (owner 2026-11-20).
+// Never bind a mock here or select one by config/env: mock lookups exist only under tests/.
+$container['faculty_identity'] = new UnavailableFacultyIdentity();
+$container['section_directory'] = new RepositorySectionDirectory($container['enrollment_catalog'], $container['faculty_identity']);
+$container['section_controller'] = new SectionController(new SectionService(
+    $container['enrollment_catalog'], $container['authorization'], $container['faculty_identity']));
 foreach (['auth', 'students', 'enrollment', 'faculty'] as $module) {
     $register = require dirname(__DIR__) . '/routes/' . $module . '.php';
     $register($container['router'], $container);

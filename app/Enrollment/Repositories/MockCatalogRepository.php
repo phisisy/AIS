@@ -57,6 +57,7 @@ final class MockCatalogRepository implements CatalogRepositoryInterface
             }
             $data['terms'][] = $row;
             $data['sections'] ??= [];
+            self::ensureAssignmentKeys($data);
             return $term;
         });
     }
@@ -79,6 +80,7 @@ final class MockCatalogRepository implements CatalogRepositoryInterface
                         self::clearCurrent($data, $now);
                     }
                     $data['terms'][$index] = $merged;
+                    self::ensureAssignmentKeys($data);
                     return $term;
                 }
             }
@@ -138,6 +140,7 @@ final class MockCatalogRepository implements CatalogRepositoryInterface
                 'created_at' => $now, 'updated_at' => $now];
             $section = Section::fromArray($row);
             $data['sections'][] = $row;
+            self::ensureAssignmentKeys($data);
             return $section;
         });
     }
@@ -148,7 +151,7 @@ final class MockCatalogRepository implements CatalogRepositoryInterface
             throw new InvalidArgumentException('Unsupported section change.');
         }
         return $this->store->transaction(function (array &$data) use ($id, $changes, $now, $check): Section {
-            $this->snapshot($data);
+            $snapshot = $this->snapshot($data);
             foreach ($data['sections'] ?? [] as $index => $row) {
                 if ($row['id'] === $id) {
                     $merged = array_replace($row, $changes, ['updated_at' => $now]);
@@ -156,13 +159,166 @@ final class MockCatalogRepository implements CatalogRepositoryInterface
                         $check($merged);
                     }
                     $section = Section::fromArray($merged);
+                    foreach ($snapshot['assignments'] as $assignment) {
+                        if ($assignment['section_id'] !== $id) {
+                            continue;
+                        }
+                        $conflict = self::conflictingSection($section, $assignment['faculty_id'], $snapshot['sections'], $snapshot['assignments']);
+                        if ($conflict !== null) {
+                            throw new HttpException(409, 'Validation failed.', ['meetings' => 'Instructor ' . $assignment['faculty_id']
+                                . ' already teaches ' . self::sectionLabel($conflict) . ' at an overlapping time.']);
+                        }
+                    }
                     // Persist the stored row, never the response's computed remaining field.
                     $data['sections'][$index] = $merged;
+                    self::ensureAssignmentKeys($data);
                     return $section;
                 }
             }
             throw new HttpException(404, 'Section not found.');
         });
+    }
+
+    public function assignedFacultyIds(array $sectionIds): array
+    {
+        $snapshot = $this->snapshot($this->store->read());
+        $result = array_fill_keys($sectionIds, []);
+        foreach ($snapshot['assignments'] as $assignment) {
+            if (array_key_exists($assignment['section_id'], $result)) {
+                $result[$assignment['section_id']][] = $assignment['faculty_id'];
+            }
+        }
+        return $result;
+    }
+
+    public function sectionIdsForFaculty(int $facultyId): array
+    {
+        $snapshot = $this->snapshot($this->store->read());
+        $ids = [];
+        foreach ($snapshot['assignments'] as $assignment) {
+            if ($assignment['faculty_id'] === $facultyId) {
+                $ids[] = $assignment['section_id'];
+            }
+        }
+        sort($ids, SORT_NUMERIC);
+        return $ids;
+    }
+
+    public function assignInstructor(int $sectionId, int $facultyId, string $now, int $actorId): array
+    {
+        return $this->store->transaction(function (array &$data) use ($sectionId, $facultyId, $now, $actorId): array {
+            $snapshot = $this->snapshot($data);
+            $section = self::sectionById($snapshot['sections'], $sectionId)
+                ?? throw new HttpException(404, 'Section not found.');
+            $facultyIds = [];
+            foreach ($snapshot['assignments'] as $assignment) {
+                if ($assignment['section_id'] === $sectionId) {
+                    $facultyIds[] = $assignment['faculty_id'];
+                }
+            }
+            if (in_array($facultyId, $facultyIds, true)) {
+                throw new HttpException(409, 'Validation failed.', ['faculty_id' => 'This instructor is already assigned to this section.']);
+            }
+            if (count($facultyIds) >= 5) {
+                throw new HttpException(409, 'Validation failed.', ['instructors' => 'A section can have at most 5 instructors.']);
+            }
+            $conflict = self::conflictingSection($section, $facultyId, $snapshot['sections'], $snapshot['assignments']);
+            if ($conflict !== null) {
+                throw new HttpException(409, 'Validation failed.', ['faculty_id' => 'This instructor already teaches '
+                    . self::sectionLabel($conflict) . ' at an overlapping time.']);
+            }
+            self::ensureAssignmentKeys($data);
+            $data['assignments'][] = ['section_id' => $sectionId, 'faculty_id' => $facultyId];
+            self::appendHistory($data, $now, 'assigned', $sectionId, $facultyId, $actorId);
+            $facultyIds[] = $facultyId;
+            return ['section' => $section, 'faculty_ids' => $facultyIds];
+        });
+    }
+
+    public function unassignInstructor(int $sectionId, int $facultyId, string $now, int $actorId): array
+    {
+        return $this->store->transaction(function (array &$data) use ($sectionId, $facultyId, $now, $actorId): array {
+            $snapshot = $this->snapshot($data);
+            $section = self::sectionById($snapshot['sections'], $sectionId)
+                ?? throw new HttpException(404, 'Section not found.');
+            $found = false;
+            $facultyIds = [];
+            $remaining = [];
+            foreach ($snapshot['assignments'] as $assignment) {
+                if ($assignment['section_id'] === $sectionId && $assignment['faculty_id'] === $facultyId) {
+                    $found = true;
+                    continue;
+                }
+                $remaining[] = $assignment;
+                if ($assignment['section_id'] === $sectionId) {
+                    $facultyIds[] = $assignment['faculty_id'];
+                }
+            }
+            if (!$found) {
+                throw new HttpException(404, 'Instructor assignment not found.');
+            }
+            self::ensureAssignmentKeys($data);
+            $data['assignments'] = $remaining;
+            self::appendHistory($data, $now, 'unassigned', $sectionId, $facultyId, $actorId);
+            return ['section' => $section, 'faculty_ids' => $facultyIds];
+        });
+    }
+
+    private static function ensureAssignmentKeys(array &$data): void
+    {
+        $data['assignments'] ??= [];
+        $data['assignment_history'] ??= [];
+    }
+
+    private static function appendHistory(array &$data, string $now, string $action, int $sectionId, int $facultyId, int $actorId): void
+    {
+        $data['assignment_history'][] = ['seq' => count($data['assignment_history']) + 1, 'at' => $now,
+            'action' => $action, 'section_id' => $sectionId, 'faculty_id' => $facultyId, 'actor_id' => $actorId];
+    }
+
+    private static function sectionById(array $sections, int $id): ?Section
+    {
+        foreach ($sections as $section) {
+            if ($section->id() === $id) {
+                return $section;
+            }
+        }
+        return null;
+    }
+
+    private static function sectionLabel(Section $section): string
+    {
+        return $section->courseCode() . '-' . $section->sectionCode() . ' (section ' . $section->id() . ')';
+    }
+
+    /** Returns the first clashing section in id order; all actual meetings count regardless of delivery mode. */
+    private static function conflictingSection(Section $target, int $facultyId, array $sections, array $assignments): ?Section
+    {
+        usort($sections, static fn (Section $a, Section $b): int => $a->id() <=> $b->id());
+        foreach ($sections as $other) {
+            if ($other->id() === $target->id() || $other->termId() !== $target->termId()) {
+                continue;
+            }
+            $assigned = false;
+            foreach ($assignments as $assignment) {
+                if ($assignment['faculty_id'] === $facultyId && $assignment['section_id'] === $other->id()) {
+                    $assigned = true;
+                    break;
+                }
+            }
+            if (!$assigned) {
+                continue;
+            }
+            foreach ($target->meetings() as $meeting) {
+                foreach ($other->meetings() as $otherMeeting) {
+                    if ($meeting['day'] === $otherMeeting['day'] && $meeting['start'] < $otherMeeting['end']
+                        && $otherMeeting['start'] < $meeting['end']) {
+                        return $other;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     private static function clearCurrent(array &$data, string $now): void
@@ -178,7 +334,7 @@ final class MockCatalogRepository implements CatalogRepositoryInterface
     /** Validates every row and cross-row invariant before any read or mutation proceeds. */
     private function snapshot(array $data): array
     {
-        if (array_diff(array_keys($data), ['terms', 'sections']) !== []) {
+        if (array_diff(array_keys($data), ['terms', 'sections', 'assignments', 'assignment_history']) !== []) {
             throw new RuntimeException('Invalid enrollment store.');
         }
         $snapshot = ['terms' => [], 'sections' => []];
@@ -216,6 +372,65 @@ final class MockCatalogRepository implements CatalogRepositoryInterface
                 $snapshot[$key][] = $model;
             }
         }
+        $assignments = $data['assignments'] ?? [];
+        $history = $data['assignment_history'] ?? [];
+        if (!is_array($assignments) || !array_is_list($assignments) || !is_array($history) || !array_is_list($history)) {
+            throw new RuntimeException('Invalid enrollment store.');
+        }
+        $sectionById = [];
+        foreach ($snapshot['sections'] as $section) {
+            $sectionById[$section->id()] = $section;
+        }
+        $pairs = [];
+        $counts = [];
+        foreach ($assignments as $assignment) {
+            if (!is_array($assignment) || array_keys($assignment) !== ['section_id', 'faculty_id']
+                || !is_int($assignment['section_id']) || $assignment['section_id'] < 1
+                || !is_int($assignment['faculty_id']) || $assignment['faculty_id'] < 1
+                || !isset($sectionById[$assignment['section_id']])) {
+                throw new RuntimeException('Invalid enrollment store.');
+            }
+            $pair = $assignment['section_id'] . ':' . $assignment['faculty_id'];
+            $counts[$assignment['section_id']] = ($counts[$assignment['section_id']] ?? 0) + 1;
+            if (isset($pairs[$pair]) || $counts[$assignment['section_id']] > 5) {
+                throw new RuntimeException('Invalid enrollment store.');
+            }
+            $pairs[$pair] = true;
+        }
+        foreach ($assignments as $assignment) {
+            $section = $sectionById[$assignment['section_id']];
+            if (self::conflictingSection($section, $assignment['faculty_id'], $snapshot['sections'], $assignments) !== null) {
+                throw new RuntimeException('Invalid enrollment store.');
+            }
+        }
+        $replayed = [];
+        foreach ($history as $index => $entry) {
+            if (!is_array($entry) || array_keys($entry) !== ['seq', 'at', 'action', 'section_id', 'faculty_id', 'actor_id']
+                || $entry['seq'] !== $index + 1 || !is_string($entry['at'])
+                || preg_match('/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\z/', $entry['at']) !== 1
+                || !in_array($entry['action'], ['assigned', 'unassigned'], true)
+                || !is_int($entry['section_id']) || $entry['section_id'] < 1 || !isset($sectionById[$entry['section_id']])
+                || !is_int($entry['faculty_id']) || $entry['faculty_id'] < 1
+                || !is_int($entry['actor_id']) || $entry['actor_id'] < 1) {
+                throw new RuntimeException('Invalid enrollment store.');
+            }
+            $pair = $entry['section_id'] . ':' . $entry['faculty_id'];
+            if ($entry['action'] === 'assigned') {
+                if (isset($replayed[$pair])) {
+                    throw new RuntimeException('Invalid enrollment store.');
+                }
+                $replayed[$pair] = true;
+            } else {
+                if (!isset($replayed[$pair])) {
+                    throw new RuntimeException('Invalid enrollment store.');
+                }
+                unset($replayed[$pair]);
+            }
+        }
+        if (array_diff_key($pairs, $replayed) !== [] || array_diff_key($replayed, $pairs) !== []) {
+            throw new RuntimeException('Invalid enrollment store.');
+        }
+        $snapshot['assignments'] = $assignments;
         return $snapshot;
     }
 }

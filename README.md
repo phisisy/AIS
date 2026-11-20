@@ -353,7 +353,26 @@ Mock storage is one file, `$runtime/enrollment/enrollment.json`, holding
 `terms` and `sections`. Every read and write validates the full snapshot;
 corruption fails closed with a generic 500. Each write uses one transaction
 for row-dependent checks and changes. MySQL remains unavailable until T-40.
-Instructor assignment and student enrollment are deferred to T-21 and T-22.
+Student enrollment is deferred to T-22.
+
+### Instructor assignments (Team 4, T-21)
+
+| Method | Path | Result |
+|---|---|---|
+| POST | `/api/registrar/sections/{id}/instructors` | `{faculty_id}` → 201 `data.section`, "Instructor assigned." |
+| DELETE | `/api/registrar/sections/{id}/instructors/{facultyId}` | 200 `data.section`, "Instructor unassigned."; 404 if not assigned |
+
+- **Access:** registrar or admin, with `X-CSRF-Token`; the service repeats the role check. Section reads now include `instructors: [{faculty_id, name}]`, in assignment order.
+- **Production refuses every assignment until T-30.** Faculty identity comes from Team 5 through `FacultyIdentityLookup`. Until T-30 binds a real lookup, `UnavailableFacultyIdentity` verifies nobody, so every assign gets 422 "Unknown or inactive faculty member." and nothing is written. Test doubles exist only under `tests/`.
+- **Refusals:**
+  - Unknown, inactive or unverifiable faculty → 422.
+  - Duplicate → 409.
+  - A 6th instructor → 409.
+  - The same instructor teaching an overlapping meeting in the same term → 409. Every actual meeting counts, including those of `tba` and `online_async` sections; back-to-back meetings are fine.
+  - A section PATCH that would create such a conflict for an assigned instructor → 409, with nothing written.
+- **Removal** never depends on identity verification or name lookup. Remaining names are resolved afterwards for the response; `null` when unavailable.
+- **Storage:** only `{section_id, faculty_id}` pairs are stored, plus an append-only `assignment_history` (`seq`, `at`, `action`, `section_id`, `faculty_id`, `actor_id`), both written in the same transaction as the change. Corrupt or inconsistent assignment data fails closed (generic 500). Stores from before T-21 load unchanged.
+- **`SectionDirectory`** (`$container['section_directory']`, in-process only) gives Teams 3 and 5 `findSection`, `approvedStudentIds` (`[]` until T-22), `isAssigned`, `sectionIdsForFaculty` and `assignedFacultyIds`. The two access methods count an assignment only for a confirmed active faculty identity, so they deny everything until T-30.
 
 **D1 / T-11b:** course code, title and units currently receive format validation
 only. A future course catalog must supply a provider for code validation and

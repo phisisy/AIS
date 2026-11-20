@@ -22,17 +22,32 @@ The scope and approval of each task are kept in `TASK_BOARD.md`. This file recor
 - **Dependencies:** T-02 ✔, B-04 ✔ (resolved by the owner)
 - **Approval status:** implementation APPROVED; policy alignment done; independent review APPROVE. Merge NOT yet approved by the owner.
 
-## T-21 — Draft file ownership (proposal only; NOT approved, nothing assigned)
+## T-21 — SectionDirectory, faculty identity port, instructor assignments (Team 4)
 
-To be confirmed in the T-21 plan once T-20 is merged and the owner approves T-21. Each agent works in its own worktree. No file has two owners at the same time.
+- **Task ID:** T-21
+- **Owner:** CLAUDE (lead: plan, contracts, integration, review). **Implementer:** CODEX.
+- **Reviewer:** AGY was assigned first and never started. It became `UNAVAILABLE_USAGE_LIMIT` on 2026-11-20. **Replacement reviewer: a fresh CODEX review session** (owner, 2026-11-20), in `..\AIS_REVIEW_T21` at `54d1a6b`, reporting to `CODEX_REVIEW_REPORT.md`. Independence caveat: Codex implemented phase 2.
+- **Approval status:** implementation APPROVED (owner, 2026-11-20). Merge into `main` NOT approved.
+- **Branches and worktrees:**
+  - Claude: `task/T-21-instructor-assignments` in `AIS_SYSTEM`, from `main` `229618b`.
+  - Codex: `task/T-21-impl` in `..\AIS_CODEX_T21`, from Claude's phase-1 commit.
+  - AGY: read-only `..\AIS_REVIEW_T21` at the handoff commit, created later.
+- **Dependencies:** T-20 ✔, B-04 ✔. T-30 for real identities. B-11 for T-31.
+- **Status:** phases 1–3 done (Claude `ce47dae`; Codex `99c92b6` and `cc1dbf5`, committed by Claude; merge `ab251da`; phase 3 `e92f328`). **Independent review in progress (Codex, replacing AGY)** (phase 4). Codex files released unless AGY finds issues in them.
 
-| Agent | Worktree / branch | Files (draft) |
+| Phase | Agent | Files (locked to that agent during the phase) |
 |---|---|---|
-| CLAUDE (lead) | `AIS_SYSTEM`, branch `task/T-21-…` | `docs/plans/T-21-*.md`; `app/Enrollment/Contracts/*` (interfaces: `SectionDirectory`, `SectionSummary`, `FacultyIdentityLookup`, `FacultyIdentity`, `UnavailableFacultyIdentity`); `app/bootstrap.php` (Enrollment wiring); `routes/enrollment.php`; `README.md` (Enrollment section); `ai-coordination/*` |
-| CODEX (backend + tests) | `..\AIS_CODEX_T21`, same task branch, sequenced after Claude's interface commit | `app/Enrollment/Repositories/{CatalogRepositoryInterface,MockCatalogRepository}.php` (assignments, `assignment_history`, extending the allowed store keys); `app/Enrollment/Services/{AssignmentService,RepositorySectionDirectory}.php` (new); `app/Enrollment/Services/SectionService.php` + `app/Enrollment/Models/Section.php` (`instructors` in JSON); `app/Enrollment/Controllers/AssignmentController.php` (new); `tests/Enrollment/*` |
-| AGY (review) | `..\AIS_REVIEW_T21` at the exact handoff commit, read-only | None (writes only `ai-coordination/AGY_REVIEW_REPORT.md` in its own worktree) |
+| 1 ✔ | CLAUDE | `app/Enrollment/Contracts/{FacultyIdentity,FacultyIdentityLookup,UnavailableFacultyIdentity,SectionSummary,SectionDirectory}.php`; `docs/plans/T-21-instructor-assignments.md` |
+| 2 | CODEX | `app/Enrollment/Models/Section.php`; `app/Enrollment/Repositories/{CatalogRepositoryInterface,MockCatalogRepository}.php`; `app/Enrollment/Services/{SectionService,RepositorySectionDirectory}.php`; `app/Enrollment/Controllers/SectionController.php`; `tests/Enrollment/**` (existing and new: `AssignmentServiceTest`, `SectionDirectoryTest`, `AssignmentHttpTest`, `FacultyIdentityPortTest`, `fixtures/StubFacultyIdentity.php`); `ai-coordination/T21_IMPLEMENTATION_REPORT.md` |
+| 3 | CLAUDE | `app/bootstrap.php` (Enrollment block); `routes/enrollment.php`; `README.md` (Enrollment section); `app/Students/Contracts/FacultyStudentVisibility.php` (docblock only); `ai-coordination/*` (except the reports) |
+| 4 | AGY | `ai-coordination/AGY_REVIEW_REPORT.md` (in its own worktree) |
 
-Sequence: Claude's plan and interfaces, then Codex's implementation and tests, then Claude's review and integration, then the AGY review, then fixes by the owning agent, then the owner's merge approval. While Codex holds the branch, Claude makes no commits to it.
+**Rules:**
+- The phases run strictly in order.
+- While Codex holds phase 2, Claude makes no commits to either T-21 branch and edits none of Codex's files.
+- Fixes go to the owner of the file.
+- Each agent sets its own `APP_RUNTIME_PATH` outside all worktrees and outside OneDrive.
+- Only Claude runs the Apache check (phase 3).
 
 ## T-11a — Academic Records (Team 3)
 

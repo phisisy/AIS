@@ -1,8 +1,8 @@
 # T-21 — SectionDirectory, faculty identity port and instructor assignments (Team 4) — Plan
 
-- **Status:** DRAFT. Planning only. **Nothing is approved for implementation.** The owner must approve this plan, the T-21 file list (§12) and the open questions (§14) first.
-- **Base:** `main` at `8c2b980` (T-20 merged, 163 tests green).
-- **Branches (proposed, §12):** `task/T-21-instructor-assignments` (Claude) and `task/T-21-impl` (Codex, branched from Claude's phase-1 commit).
+- **Status:** **APPROVED for implementation** (owner, 2026-11-20), including the file list (§12) and Q1–Q4 (§14). The owner added requirements; see §1.1.
+- **Base:** `main` at `229618b` (T-20 merged as `8c2b980`; 163 tests green).
+- **Branches:** `task/T-21-instructor-assignments` (Claude, from `229618b`) and `task/T-21-impl` (Codex, branched from Claude's phase-1 commit, in worktree `..\AIS_CODEX_T21`).
 - **Pattern to copy:** T-20 Enrollment module (`MockCatalogRepository` with one store and one lock, `$check` closures, `fromArray` fail-closed). The audit pattern comes from T-11a `MockStudentRepository::appendHistory`.
 - **Out of scope:**
   - T-22: enrollments. `approvedStudentIds` returns `[]`.
@@ -26,6 +26,16 @@
 | 10 | Store only `{section_id, faculty_id}`. Names are resolved at read time | §3.3, §5.1 |
 | 11 | At most 5 instructors per section (Q7) | §3.2 |
 
+### 1.1 Owner approval additions (2026-11-20)
+
+- **Q4 detail:**
+  - Retained assignments and their history stay when faculty become inactive.
+  - New assignments to inactive faculty are refused (422, A8).
+  - **Inactive faculty must not gain access from a retained assignment.** Therefore the access-granting `SectionDirectory` methods (`isAssigned`, `sectionIdsForFaculty`) count an assignment only when `FacultyIdentityLookup` confirms the faculty member is active (A14). Display (`instructors`) and `assignedFacultyIds` still list every retained assignment.
+- **T-20 exact-response tests:** update them for `instructors` **without weakening them**. Exact key order and value comparisons stay exact; no assertion is relaxed to a subset or loose match.
+- **Backward compatibility:** T-20 stores, with no `assignments` or `assignment_history` keys, load unchanged. The only API change is the additive `instructors` key on section responses (approved contract) and the new endpoints.
+- B-11 is recorded in `INTEGRATION_BLOCKERS.md`.
+
 ## 2. Decisions taken by this plan
 
 | ID | Decision | Why |
@@ -42,6 +52,7 @@
 | A10 | `assignment_history` is **one global list** with a gap-free `seq = index + 1`. It isn't a per-section map. | Simpler than the T-11a map, and "gap-free" is directly checkable. |
 | A11 | Snapshot validation **replays** the history. Every `assigned` entry needs the pair to be absent, every `unassigned` entry needs it present, and the replayed set must equal `assignments`. | It detects hand edits to either list. It costs a few lines and one linear pass. |
 | A12 | ARCHITECTURE §6 item 3 ("client-supplied `faculty_id` rejected") applies to the actor's identity on "me" routes. Here `faculty_id` is the *target* of a staff action, validated through the port. The actor always comes from the session. | Recorded so that a reviewer doesn't flag it. |
+| A14 | **Access needs an active identity.** `RepositorySectionDirectory` takes the `FacultyIdentityLookup`. `isAssigned` and `sectionIdsForFaculty` return an assignment only when `find($facultyId)` returns an identity with the same id and `active === true`. Null, inactive, a mismatch or any `Throwable` means not assigned (false or `[]`). `assignedFacultyIds` (display) isn't filtered. In production (`UnavailableFacultyIdentity`) these two methods therefore always deny. | Owner Q4: retained assignments must not grant access to inactive faculty. It fails closed until T-30. Account-level inactivity is also enforced by Team 2 authentication on every request. |
 | A13 | Instructor order is the stored assignment order. Assign appends, and unassign removes one entry and keeps the rest in order. | Deterministic, and it carries meaning (first assigned appears first). |
 
 ## 3. API contract
@@ -197,9 +208,9 @@ interface SectionDirectory
     public function findSection(int $sectionId): ?SectionSummary;
     /** @return list<int> Returns [] until T-22. */
     public function approvedStudentIds(int $sectionId): array;
-    /** Unknown section or faculty → false. */
+    /** Access check. True only for a stored assignment AND a confirmed active identity (A14); otherwise false. */
     public function isAssigned(int $facultyId, int $sectionId): bool;
-    /** @return list<int> ascending */
+    /** Access list. @return list<int> ascending; [] unless the identity is confirmed active (A14). */
     public function sectionIdsForFaculty(int $facultyId): array;
     /** @return list<int> in assignment order */
     public function assignedFacultyIds(int $sectionId): array;
@@ -237,7 +248,7 @@ The `updateSection` doc gains: "after `$check`, rejects instructor schedule conf
 - **`SectionController`:**
   - New method `assignInstructor`: `$request->json(['faculty_id'])`, returns 201.
   - New method `unassignInstructor`: `$request->json([])`, returns 200.
-- **`RepositorySectionDirectory implements SectionDirectory`** (in `app/Enrollment/Services/`), built on `CatalogRepositoryInterface`. `approvedStudentIds` returns `[]` with the comment `// shortcut: no enrollments until T-22, which replaces this`.
+- **`RepositorySectionDirectory implements SectionDirectory`** (in `app/Enrollment/Services/`), built on `CatalogRepositoryInterface` **and `FacultyIdentityLookup`** (A14: `isAssigned` and `sectionIdsForFaculty` require a confirmed active identity and fail closed). `approvedStudentIds` returns `[]` with the comment `// shortcut: no enrollments until T-22, which replaces this`.
 
 ## 7. Concurrency
 
@@ -336,6 +347,7 @@ The `updateSection` doc gains: "after `$check`, rejects instructor schedule conf
 - `approvedStudentIds` returns `[]`.
 - `isAssigned` true or false, including for an unknown section.
 - `sectionIdsForFaculty` ascending.
+- **A14:** with a stub lookup, an active identity gives true and the ids. Inactive, null, an id mismatch or a thrown lookup gives false and `[]`, even though the assignment is stored. `assignedFacultyIds` still lists it. With `UnavailableFacultyIdentity` both access methods always deny.
 - `assignedFacultyIds` in order.
 - `FacultyIdentity` constructor rejects id 0, an empty name, a 151-char name, and control or bidi characters.
 
@@ -411,6 +423,7 @@ Done by Codex, in a scratch copy outside every worktree. Record the results in t
 | M17 | POST instructors guard set to `authenticated` | Matrix |
 | M18 | Drop the stored-conflict snapshot check | Store test |
 | M19 | Drop `requireRole` in `assignInstructor` | Unit 9 |
+| M20 | `isAssigned` ignores the identity's `active` flag (A14) | Directory A14 unit |
 
 ## 10. Acceptance criteria
 
@@ -432,7 +445,7 @@ Done by Codex, in a scratch copy outside every worktree. Record the results in t
 // Team 4: instructor assignments (T-21). Verifies nobody until T-30 binds Team 5's lookup (owner 2026-11-20).
 // Never bind a mock here or select one by config/env: mock lookups exist only under tests/.
 $container['faculty_identity'] = new UnavailableFacultyIdentity();
-$container['section_directory'] = new RepositorySectionDirectory($container['enrollment_catalog']);
+$container['section_directory'] = new RepositorySectionDirectory($container['enrollment_catalog'], $container['faculty_identity']);
 $container['section_controller'] = new SectionController(new SectionService(
     $container['enrollment_catalog'], $container['authorization'], $container['faculty_identity']));
 ```
@@ -541,10 +554,10 @@ No destructive database operations, no schema changes and no deletions of data. 
 
 | # | Question | Proposed default (used by this plan) |
 |---|---|---|
-| Q1 | A `tba` or `online_async` section that does list meetings: does it take part in conflict checks? | **Yes**: the check uses meetings only and ignores the mode (A6). Sections with no meetings never conflict |
-| Q2 | Add `app/Students/Contracts/FacultyStudentVisibility.php` (docblock only) to T-21's allowed files? | **Yes**, Claude applies it in phase 3. If not, T-31 applies the §8 text |
-| Q3 | Branch layout: Codex on its own `task/T-21-impl` branch, merged by Claude (git can't check out one branch in two worktrees) | **Yes** |
-| Q4 | Keep and display existing assignments of faculty who later become inactive? | **Yes**: keep them and show the name. Only new assignments are refused. Staff can unassign |
+| Q1 | A `tba` or `online_async` section that does list meetings: does it take part in conflict checks? | **Decided (owner): yes.** All actual meetings count, whatever the mode (A6) |
+| Q2 | Add `app/Students/Contracts/FacultyStudentVisibility.php` (docblock only) to T-21's allowed files? | **Decided: yes**, comment only, no Team 3 behaviour change. Claude applies it in phase 3 |
+| Q3 | Branch layout: Codex on its own `task/T-21-impl` branch, merged by Claude | **Decided: yes**, separate branch and worktree |
+| Q4 | Keep and display existing assignments of faculty who later become inactive? | **Decided: yes.** Keep assignments and history, and refuse new assignments to inactive faculty. **Inactive faculty gain no access** from retained assignments (A14) |
 
 ## 15. Hand-offs
 

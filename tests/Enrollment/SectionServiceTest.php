@@ -14,19 +14,19 @@ function sectionFixture(string $directory): array
     return $f;
 }
 
-test('Sections: create normalizes codes, stores approved_count 0, computes remaining, sorts meetings, has no instructors key', function (): void {
+test('Sections: create normalizes codes, stores approved_count 0, computes remaining, sorts meetings and empty instructors', function (): void {
     $directory = tempDirectory();
     try {
         [, $sections, , $users] = sectionFixture($directory);
         $s = $sections->create($users->findById(2), sectionInput(['course_code' => ' cs101 ', 'section_code' => ' a ', 'meetings' => [
             meeting('WED', '13:00', '14:00'), meeting('MON', '10:30', '11:30'), meeting('MON', '09:00', '10:30', ' R-2 ')]]));
         same(['id', 'term_id', 'course_code', 'course_title', 'units', 'section_code', 'capacity', 'approved_count', 'remaining', 'delivery_mode',
-            'meetings', 'created_at', 'updated_at'], array_keys($s));
+            'meetings', 'instructors', 'created_at', 'updated_at'], array_keys($s));
         same(['CS101', 'A', 0, 40, 40, 1], [$s['course_code'], $s['section_code'], $s['approved_count'], $s['capacity'], $s['remaining'], $s['id']]);
         same([['day' => 'MON', 'start' => '09:00', 'end' => '10:30', 'room' => 'R-2'],
             ['day' => 'MON', 'start' => '10:30', 'end' => '11:30', 'room' => 'R-101'],
             ['day' => 'WED', 'start' => '13:00', 'end' => '14:00', 'room' => 'R-101']], $s['meetings']);
-        check(!array_key_exists('instructors', $s), 'No instructors key in T-20.');
+        same([], $s['instructors']);
         same($s, $sections->get(1));
     } finally {
         removeTestDirectory($directory);
@@ -286,7 +286,7 @@ test('Sections delivery_mode: scheduled needs a meeting; tba and online_async ma
         $first = $sections->create($r, sectionInput());
         same('scheduled', $first['delivery_mode']);
         same(['id', 'term_id', 'course_code', 'course_title', 'units', 'section_code', 'capacity', 'approved_count', 'remaining',
-            'delivery_mode', 'meetings', 'created_at', 'updated_at'], array_keys($first));
+            'delivery_mode', 'meetings', 'instructors', 'created_at', 'updated_at'], array_keys($first));
         foreach ([sectionInput(['section_code' => 'B', 'meetings' => []]), sectionInput(['section_code' => 'B', 'delivery_mode' => 'scheduled', 'meetings' => []])] as $input) {
             $e = httpFailure(fn () => $sections->create($r, $input));
             same([422, ['meetings' => NO_MEETINGS_MESSAGE]], [$e->status, $e->errors]);
