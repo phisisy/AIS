@@ -4,7 +4,9 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
-## T-20 — MANDATORY AGY review before merge (owner decision, 2026-11-20) — READY_FOR_AGY_REVIEW
+## T-20 — MANDATORY AGY review before merge (owner decision, 2026-11-20) — REVIEWED, MERGED
+
+> **Outcome:** AGY APPROVE on `81097d5` (`AGY_REVIEW_REPORT.md`). Merged into `main` as `8c2b980` on 2026-11-20. Not pushed.
 
 - **Owner decision:** AGY's independent review is mandatory. T-20 may be merged locally only if all of the following hold:
   - AGY reports **APPROVE** on the **exact final revision**.

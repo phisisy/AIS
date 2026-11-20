@@ -173,7 +173,7 @@ Full detail is in plan §9, `ARCHITECTURE.md` §4.1, `API_CONTRACTS.md` §2–§
 
 - Implementation commit: `b04fec4` on `task/T-20-terms-sections`. The follow-up `909a000` records the hash.
 - Policy alignment commit: `0624eb7` (delivery_mode, bug fix, decision records, coordination files).
-- Not merged, not pushed.
+- AGY review record: `21d5647`. **Merge commit: `8c2b980` on `main`** (2026-11-20). Not pushed.
 
 ## 11. Policy alignment (owner decisions, 2026-11-17)
 
@@ -257,3 +257,19 @@ T-20 is conditionally approved, pending policy alignment and an independent revi
 **Ahead of deployment:** check that no environment holds an enrollment store written by `b04fec4` or `909a000`.
 
 **Result:** READY_FOR_MERGE, awaiting owner merge approval.
+
+## 13. AGY review and merge (2026-11-20)
+
+- **Owner decision:** AGY's review is mandatory. The merge was conditionally approved on AGY APPROVE of the exact final revision.
+- **AGY review:**
+  - **Verdict:** APPROVE on `81097d5a82963269e45965e4bc9352010eea2e30`, range `592d912..81097d5`.
+  - **Environment:** reviewed in a separate worktree, `..\AIS_REVIEW_T20`.
+  - **Findings:** no Critical, High or Medium findings, and no blockers.
+  - **Limitations listed:** L-3, I-1 to I-4 (already documented).
+  - **Codex's earlier conclusions:** confirmed by AGY.
+  - **Record:** the report and AGY's status row were committed unchanged in `21d5647`, a docs-only commit on top of the reviewed `81097d5`.
+- **Pre-merge checks (branch at `81097d5`):**
+  - 163/163 tests, 104/104 `php -l`, Apache PASS on both roots.
+  - `main...branch` touched only T-20 files: `app/Enrollment/**`, `app/bootstrap.php`, `routes/enrollment.php`, the seeder, `tests/Enrollment/**`, the plan, the README and `ai-coordination/*`.
+- **Merge:** a `--no-ff` local merge into `main` as **`8c2b980`**, with no conflicts. Not pushed.
+- **Post-merge checks on `main`:** 163/163 tests, 104/104 `php -l`, Apache PASS on both document roots.
