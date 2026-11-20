@@ -39,3 +39,8 @@ The four **expected-red** tests in this phase-2 worktree are:
 - The planned production wiring and HTTP route checks remain incomplete in this worktree by the phase split. They passed with phase-3 wiring simulated in scratch, and must pass in the integration branch before merge.
 - This follow-up has not been staged or committed, as directed.
 - Snapshot replay and conflict validation are linear or greater in the JSON store size; the plan accepts this for the development store. Faculty deactivation between pre-lock verification and commit remains the approved A4 window.
+
+## Review fixes
+
+- At integrated commit `0b32736`, C10 now races three unassigns from section 1 with three assigns to a nonoverlapping section 2; all six writes, history sequences 1–9, both final assignment sets, and snapshot replay are checked. New C11 races assign and unassign of one pair for three rounds and checks both permitted serial outcomes, history, and replay.
+- Full `php tests/run.php` with `APP_RUNTIME_PATH` under `%TEMP%`: **184 passed, 0 failed, 184 total** (supersedes the phase-2 counts above). `php -l` passed for both changed PHP files; `git diff --check` passed.

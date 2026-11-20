@@ -257,15 +257,46 @@ test('Enrollment concurrency C10: mixed writes keep gap-free history and replay'
             $actor = $users->findById(2);
             $terms->create($actor, termInput());
             $sections->create($actor, sectionInput());
+            $sections->create($actor, sectionInput(['section_code' => 'B', 'meetings' => [meeting('TUE')]]));
             foreach ([10, 11, 12] as $id) { $sections->assignInstructor($actor, 1, assignInput($id)); }
             $results = raceEnrollmentWorkers($dir, [['unassign', assignInput(10), 1], ['unassign', assignInput(11), 1],
-                ['unassign', assignInput(12), 1], ['assign', assignInput(20), 1], ['assign', assignInput(21), 1], ['assign', assignInput(22), 1]]);
+                ['unassign', assignInput(12), 1], ['assign', assignInput(20), 2], ['assign', assignInput(21), 2], ['assign', assignInput(22), 2]]);
             same(6, raceWinners($results));
             $store = json_decode(storeBytes($dir), true);
             same(range(1, 9), array_column($store['assignment_history'], 'seq'));
-            $remaining = $repository->assignedFacultyIds([1])[1];
-            sort($remaining);
-            same([20, 21, 22], $remaining);
+            $assigned = $repository->assignedFacultyIds([1, 2]); // Snapshot must replay the final store.
+            sort($assigned[2]);
+            same([], $assigned[1]);
+            same([20, 21, 22], $assigned[2]);
+        } finally { removeTestDirectory($dir); }
+    }
+});
+
+test('Enrollment concurrency C11: assign and unassign of one pair serialize with matching history', function (): void {
+    for ($round = 0; $round < 3; $round++) {
+        $dir = tempDirectory();
+        try {
+            [$terms, $sections, $repository, $users] = enrollmentFixture($dir,
+                new StubFacultyIdentity([10 => ['name' => 'Instructor', 'active' => true]]));
+            $actor = $users->findById(2);
+            $terms->create($actor, termInput());
+            $sections->create($actor, sectionInput());
+            $results = raceEnrollmentWorkers($dir, [['assign', assignInput(10), 1], ['unassign', assignInput(10), 1]]);
+            same(true, $results[0]['ok']);
+            $history = json_decode(storeBytes($dir), true)['assignment_history'];
+            same(range(1, raceWinners($results)), array_column($history, 'seq'));
+            if ($results[1]['ok']) {
+                same(2, raceWinners($results));
+                same(['assigned', 'unassigned'], array_column($history, 'action'));
+                same([], $repository->assignedFacultyIds([1])[1]);
+            } else {
+                same(1, raceWinners($results));
+                same([404, 'Instructor assignment not found.'], [$results[1]['status'], $results[1]['message']]);
+                same(['assigned'], array_column($history, 'action'));
+                same([10], $repository->assignedFacultyIds([1])[1]);
+            }
+            same(array_fill(0, count($history), 1), array_column($history, 'section_id'));
+            same(array_fill(0, count($history), 10), array_column($history, 'faculty_id'));
         } finally { removeTestDirectory($dir); }
     }
 });
