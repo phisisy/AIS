@@ -6,6 +6,12 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ## T-21 → independent review (prepared by Claude, 2026-11-20) — REASSIGNED to a fresh CODEX review session
 
+> **Review outcome #1 (2026-11-20):** fresh Codex review of `54d1a6b` → **REQUEST_CHANGES** (`CODEX_T21_REVIEW_REPORT.md`).
+> - **Medium:** C10 test depends on scheduling (cap 409 possible on correct code).
+> - **Low:** no same-pair assign/unassign race test.
+> - No production defect.
+> - Claude verified the Medium finding; both items are assigned to Codex (test owner). A new review of the corrected commit follows.
+
 > **Reviewer change (owner, 2026-11-20):**
 > - **AGY** was assigned first. It hasn't started and is now `UNAVAILABLE_USAGE_LIMIT`.
 > - **Replacement:** the owner assigned a **fresh Codex review session** in the separate worktree `..\AIS_REVIEW_T21`, detached at `54d1a6b`.
