@@ -6,6 +6,8 @@ namespace App\Enrollment\Services;
 use App\Auth\Models\User;
 use App\Auth\Services\AuthorizationService;
 use App\Core\HttpException;
+use App\Enrollment\Contracts\FacultyIdentityLookup;
+use App\Enrollment\Contracts\UnavailableFacultyIdentity;
 use App\Enrollment\Models\Section;
 use App\Enrollment\Repositories\CatalogRepositoryInterface;
 use Closure;
@@ -19,12 +21,15 @@ final class SectionService
     private const OPTIONAL_FIELDS = ['delivery_mode'];
     private const NO_MEETINGS = 'A scheduled section needs at least one meeting. Set delivery_mode to "tba" or "online_async" for a section without meetings.';
     private Closure $clock;
+    private readonly FacultyIdentityLookup $identities;
 
     public function __construct(
         private readonly CatalogRepositoryInterface $catalog,
         private readonly AuthorizationService $authorization,
+        ?FacultyIdentityLookup $identities = null,
         ?callable $clock = null,
     ) {
+        $this->identities = $identities ?? new UnavailableFacultyIdentity();
         $this->clock = $clock === null ? static fn (): int => time() : Closure::fromCallable($clock);
     }
 
@@ -58,13 +63,13 @@ final class SectionService
         }
         $this->throwIfErrors($errors);
         $result = $this->catalog->searchSections($filters, $page, $perPage);
-        return ['sections' => array_map(static fn (Section $section): array => $section->toArray(), $result['sections']),
+        return ['sections' => $this->present($result['sections']),
             'pagination' => ['page' => $page, 'per_page' => $perPage, 'total' => $result['total']]];
     }
 
     public function get(int $id): array
     {
-        return ($this->catalog->findSection($id) ?? throw new HttpException(404, 'Section not found.'))->toArray();
+        return $this->present([$this->catalog->findSection($id) ?? throw new HttpException(404, 'Section not found.')])[0];
     }
 
     public function create(User $actor, array $input): array
@@ -85,7 +90,7 @@ final class SectionService
             self::requireMeetingsForMode($fields, $errors);
         }
         $this->throwIfErrors($errors);
-        return $this->catalog->createSection($fields, $this->now())->toArray();
+        return $this->catalog->createSection($fields, $this->now())->withInstructors([]);
     }
 
     public function update(User $actor, int $id, array $input): array
@@ -112,7 +117,93 @@ final class SectionService
                     ['capacity' => 'Capacity cannot be below the approved count (' . $row['approved_count'] . ').']);
             }
         };
-        return $this->catalog->updateSection($id, $changes, $this->now(), $check)->toArray();
+        return $this->present([$this->catalog->updateSection($id, $changes, $this->now(), $check)])[0];
+    }
+
+    public function assignInstructor(User $actor, int $sectionId, array $input): array
+    {
+        $this->authorization->requireRole($actor, self::STAFF);
+        $this->allowFields($input, ['faculty_id']);
+        $this->catalog->findSection($sectionId) ?? throw new HttpException(404, 'Section not found.');
+        if (!array_key_exists('faculty_id', $input)) {
+            throw new HttpException(422, 'Validation failed.', ['faculty_id' => 'This field is required.']);
+        }
+        $facultyId = $input['faculty_id'];
+        if (!is_int($facultyId) || $facultyId < 1) {
+            throw new HttpException(422, 'Validation failed.', ['faculty_id' => 'Use a positive whole number.']);
+        }
+        try {
+            $identity = $this->identities->find($facultyId);
+        } catch (\Throwable) {
+            $identity = null;
+        }
+        if ($identity === null || $identity->facultyId !== $facultyId || !$identity->active) {
+            throw new HttpException(422, 'Validation failed.', ['faculty_id' => 'Unknown or inactive faculty member.']);
+        }
+        $result = $this->catalog->assignInstructor($sectionId, $facultyId, $this->now(), $actor->id);
+        return $this->presentAssignment($result);
+    }
+
+    public function unassignInstructor(User $actor, int $sectionId, int $facultyId): array
+    {
+        $this->authorization->requireRole($actor, self::STAFF);
+        $result = $this->catalog->unassignInstructor($sectionId, $facultyId, $this->now(), $actor->id);
+        return $this->presentAssignment($result, false);
+    }
+
+    /** @param list<Section> $sections */
+    private function present(array $sections): array
+    {
+        if ($sections === []) {
+            return [];
+        }
+        $bySection = $this->catalog->assignedFacultyIds(array_map(static fn (Section $section): int => $section->id(), $sections));
+        $ids = [];
+        foreach ($bySection as $facultyIds) {
+            foreach ($facultyIds as $id) {
+                $ids[$id] = $id;
+            }
+        }
+        $names = $this->names(array_values($ids));
+        return array_map(static function (Section $section) use ($bySection, $names): array {
+            $instructors = [];
+            foreach ($bySection[$section->id()] ?? [] as $id) {
+                $instructors[] = ['faculty_id' => $id, 'name' => $names[$id] ?? null];
+            }
+            return $section->withInstructors($instructors);
+        }, $sections);
+    }
+
+    /** Uses the committed transaction result, avoiding a second store read for assignment responses. */
+    private function presentAssignment(array $result, bool $resolveNames = true): array
+    {
+        $names = $resolveNames ? $this->names($result['faculty_ids']) : [];
+        $instructors = [];
+        foreach ($result['faculty_ids'] as $id) {
+            $instructors[] = ['faculty_id' => $id, 'name' => $names[$id] ?? null];
+        }
+        return $result['section']->withInstructors($instructors);
+    }
+
+    /** @param list<int> $ids @return array<int,string> */
+    private function names(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        try {
+            $found = $this->identities->findMany(array_values(array_unique($ids)));
+        } catch (\Throwable) {
+            return [];
+        }
+        $names = [];
+        foreach ($ids as $id) {
+            if (isset($found[$id]) && $found[$id] instanceof \App\Enrollment\Contracts\FacultyIdentity
+                && $found[$id]->facultyId === $id) {
+                $names[$id] = $found[$id]->displayName;
+            }
+        }
+        return $names;
     }
 
     /** Format validation only; term existence and uniqueness belong to the repository lock. */

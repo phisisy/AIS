@@ -185,3 +185,87 @@ test('Enrollment concurrency: term PATCHes of different fields are all kept', fu
         }
     }
 });
+
+test('Enrollment concurrency C6: overlapping assignments serialize with one conflict', function (): void {
+    for ($round = 0; $round < 3; $round++) {
+        $dir = tempDirectory();
+        try {
+            [$terms, $sections, $repository, $users] = enrollmentFixture($dir);
+            $actor = $users->findById(2);
+            $terms->create($actor, termInput());
+            $sections->create($actor, sectionInput(['meetings' => [meeting('MON', '09:00', '10:00')]]));
+            $sections->create($actor, sectionInput(['section_code' => 'B', 'meetings' => [meeting('MON', '09:30', '10:30')]]));
+            $results = raceEnrollmentWorkers($dir, [['assign', assignInput(), 1], ['assign', assignInput(), 2]]);
+            same(1, raceWinners($results));
+            foreach ($results as $result) { if (!$result['ok']) { same([409, ['faculty_id']], [$result['status'], array_keys($result['errors'])]); } }
+            same(1, count($repository->sectionIdsForFaculty(10)));
+            same(1, count(json_decode(storeBytes($dir), true)['assignment_history']));
+        } finally { removeTestDirectory($dir); }
+    }
+});
+
+test('Enrollment concurrency C7 and C8: cap and duplicate races append once', function (): void {
+    for ($round = 0; $round < 3; $round++) {
+        $dir = tempDirectory();
+        try {
+            [$terms, $sections, $repository, $users] = enrollmentFixture($dir,
+                new StubFacultyIdentity(array_fill_keys(range(10, 99), ['name' => 'Instructor', 'active' => true])));
+            $actor = $users->findById(2);
+            $terms->create($actor, termInput());
+            $sections->create($actor, sectionInput());
+            foreach (range(10, 13) as $id) { $sections->assignInstructor($actor, 1, assignInput($id)); }
+            $results = raceEnrollmentWorkers($dir, [['assign', assignInput(14), 1], ['assign', assignInput(15), 1], ['assign', assignInput(16), 1]]);
+            same(1, raceWinners($results));
+            foreach ($results as $result) { if (!$result['ok']) { same([409, ['instructors']], [$result['status'], array_keys($result['errors'])]); } }
+            same(5, count($repository->assignedFacultyIds([1])[1]));
+            $sections->create($actor, sectionInput(['section_code' => 'B', 'meetings' => [meeting('TUE')]]));
+            $results = raceEnrollmentWorkers($dir, [['assign', assignInput(20), 2], ['assign', assignInput(20), 2], ['assign', assignInput(20), 2]]);
+            same(1, raceWinners($results));
+            foreach ($results as $result) { if (!$result['ok']) { same([409, ['faculty_id']], [$result['status'], array_keys($result['errors'])]); } }
+            same([20], $repository->assignedFacultyIds([2])[2]);
+            same(6, count(json_decode(storeBytes($dir), true)['assignment_history']));
+        } finally { removeTestDirectory($dir); }
+    }
+});
+
+test('Enrollment concurrency C9: assignment and timetable PATCH cannot both create a conflict', function (): void {
+    for ($round = 0; $round < 3; $round++) {
+        $dir = tempDirectory();
+        try {
+            [$terms, $sections, $repository, $users] = enrollmentFixture($dir,
+                new StubFacultyIdentity([10 => ['name' => 'Instructor', 'active' => true]]));
+            $actor = $users->findById(2);
+            $terms->create($actor, termInput());
+            $sections->create($actor, sectionInput(['meetings' => [meeting('MON', '09:00', '10:00')]]));
+            $sections->create($actor, sectionInput(['section_code' => 'B', 'meetings' => [meeting('MON', '10:00', '11:00')]]));
+            $sections->assignInstructor($actor, 1, assignInput());
+            $results = raceEnrollmentWorkers($dir, [['assign', assignInput(), 2],
+                ['updateSection', ['meetings' => [['day' => 'MON', 'start' => '09:30', 'end' => '10:30', 'room' => 'R']]], 2]]);
+            same(1, raceWinners($results));
+            foreach ($results as $result) { if (!$result['ok']) { same(409, $result['status']); } }
+            $repository->findSection(2); // Snapshot must accept the final store.
+        } finally { removeTestDirectory($dir); }
+    }
+});
+
+test('Enrollment concurrency C10: mixed writes keep gap-free history and replay', function (): void {
+    for ($round = 0; $round < 3; $round++) {
+        $dir = tempDirectory();
+        try {
+            [$terms, $sections, $repository, $users] = enrollmentFixture($dir,
+                new StubFacultyIdentity(array_fill_keys(range(10, 99), ['name' => 'Instructor', 'active' => true])));
+            $actor = $users->findById(2);
+            $terms->create($actor, termInput());
+            $sections->create($actor, sectionInput());
+            foreach ([10, 11, 12] as $id) { $sections->assignInstructor($actor, 1, assignInput($id)); }
+            $results = raceEnrollmentWorkers($dir, [['unassign', assignInput(10), 1], ['unassign', assignInput(11), 1],
+                ['unassign', assignInput(12), 1], ['assign', assignInput(20), 1], ['assign', assignInput(21), 1], ['assign', assignInput(22), 1]]);
+            same(6, raceWinners($results));
+            $store = json_decode(storeBytes($dir), true);
+            same(range(1, 9), array_column($store['assignment_history'], 'seq'));
+            $remaining = $repository->assignedFacultyIds([1])[1];
+            sort($remaining);
+            same([20, 21, 22], $remaining);
+        } finally { removeTestDirectory($dir); }
+    }
+});

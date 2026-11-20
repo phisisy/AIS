@@ -8,6 +8,9 @@ use App\Core\JsonStore;
 use App\Enrollment\Repositories\MockCatalogRepository;
 use App\Enrollment\Services\SectionService;
 use App\Enrollment\Services\TermService;
+use App\Enrollment\Contracts\FacultyIdentityLookup;
+
+require_once __DIR__ . '/fixtures/StubFacultyIdentity.php';
 
 require_once dirname(__DIR__) . '/Auth/HttpSupport.php';
 
@@ -27,14 +30,14 @@ function enrollmentUserRows(): array
 }
 
 /** @return array{0: TermService, 1: SectionService, 2: MockCatalogRepository, 3: MockUserRepository} */
-function enrollmentFixture(string $directory): array
+function enrollmentFixture(string $directory, ?FacultyIdentityLookup $identities = null): array
 {
     $users = new MockUserRepository(new JsonStore($directory . '/auth/users.json'));
     $users->seed(enrollmentUserRows());
     $repository = new MockCatalogRepository(new JsonStore($directory . '/enrollment/enrollment.json'));
     $clock = static fn (): int => 1_780_000_000;
     return [new TermService($repository, new AuthorizationService(), $clock),
-        new SectionService($repository, new AuthorizationService(), $clock), $repository, $users];
+        new SectionService($repository, new AuthorizationService(), $identities, $clock), $repository, $users];
 }
 
 function termInput(array $override = []): array
@@ -83,6 +86,28 @@ function writeEnrollmentStore(string $directory, string $contents): string
     }
     file_put_contents($directory . '/enrollment/enrollment.json', $contents);
     return $directory . '/enrollment/enrollment.json';
+}
+
+function assignInput(int $facultyId = 10): array
+{
+    return ['faculty_id' => $facultyId];
+}
+
+function storeBytes(string $directory): string
+{
+    return file_get_contents($directory . '/enrollment/enrollment.json');
+}
+
+/** Raw, consistent fixture for production HTTP reads and DELETE. */
+function seedAssignment(string $directory, int $sectionId, int $facultyId): void
+{
+    (new JsonStore($directory . '/enrollment/enrollment.json'))->transaction(static function (array &$data) use ($sectionId, $facultyId): void {
+        $data['assignments'] ??= [];
+        $data['assignment_history'] ??= [];
+        $data['assignments'][] = ['section_id' => $sectionId, 'faculty_id' => $facultyId];
+        $data['assignment_history'][] = ['seq' => count($data['assignment_history']) + 1, 'at' => '2026-11-20T00:00:00Z',
+            'action' => 'assigned', 'section_id' => $sectionId, 'faculty_id' => $facultyId, 'actor_id' => 2];
+    });
 }
 
 function enrollmentServer(): AuthHttpServer
