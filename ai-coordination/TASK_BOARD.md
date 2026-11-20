@@ -21,7 +21,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-11b | 3 | Course catalog, curriculum, real enrollment/grade summaries | T-11a, D1, T-22, T-32 | PROPOSED (not approved) |
 | T-06 | 2 | Protected admin registry + owner-only recovery CLI | T-03 ✔ | PROPOSED (design conditionally approved; `PROPOSAL_ADMIN_PROTECTION_RECOVERY.md` v2; implementation not approved) |
 | T-20 | 4 | Terms & sections catalog | T-02 ✔ | **MERGED** into `main` as `8c2b980` (2026-11-20). AGY APPROVE on `81097d5`, Codex APPROVE on `60ac236`; 163/163 tests, 104/104 lint, Apache PASS on `main`. Not pushed. See `T20_IMPLEMENTATION_REPORT.md` §13 |
-| T-21 | 4 | SectionDirectory, faculty identity port, instructor assignments | T-20 ✔, B-04 ✔ | READY_FOR_REVIEW (re-review): review #1 (Codex, `54d1a6b`) REQUEST_CHANGES fixed in `2bc6a90`/`e46b543` (tests only); 184/184, 115/115 lint, Apache + real DELETE PASS; not merged |
+| T-21 | 4 | SectionDirectory, faculty identity port, instructor assignments | T-20 ✔, B-04 ✔ | APPROVED for merge: re-review #2 APPROVE on `417ba6a` (review #1 REQUEST_CHANGES fixed, tests only); owner merge authorization 2026-11-20 |
 | T-22 | 4 | Enrollment requests, approval & schedule | T-11, T-21 | PROPOSED |
 | T-30 | 5 | Faculty profiles + FacultyIdentityLookup | T-21, B-04 ✔ | PROPOSED (assignments moved to Team 4 by B-04) |
 | T-31 | 5 | Class rosters | T-22, T-30 | PROPOSED |

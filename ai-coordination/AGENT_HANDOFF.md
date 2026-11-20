@@ -4,7 +4,14 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
-## T-21 → RE-REVIEW of corrected commit (prepared by Claude, 2026-11-20) — READY_FOR_REVIEW, not started
+## T-21 → RE-REVIEW of corrected commit (prepared by Claude, 2026-11-20) — REVIEWED: APPROVE
+
+> **Re-review #2:** separate session, worktree `..\AIS_REVIEW_T21_R2`, result **APPROVE** on exactly `417ba6a76421d3dfdf19cd6a1d0b4f9736baa89e` (`T21_REREVIEW_REPORT.md`).
+> - Tests: 184/184. Lint: 115/115.
+> - C10 and C11 ran 48 rounds each.
+> - Mutations M9, M13–M17 were independently killed. With review #1, all of M9–M20 are now independently verified.
+> - No production code changed in the corrections.
+> - **Apache gap:** Claude re-ran `apache_check.php` and the real-session DELETE probe at `417ba6a` before merging. Both pass on both roots. The probe stays uncommitted (it would be a Core-owned test change), so this is an accepted documentation limitation.
 
 - **Why:** review #1, a fresh Codex session reviewing `54d1a6b`, returned **REQUEST_CHANGES** (`CODEX_T21_REVIEW_REPORT.md`).
   - **Medium:** C10 depended on scheduling.
