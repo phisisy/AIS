@@ -4,6 +4,32 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
+## T-21 → RE-REVIEW of corrected commit (prepared by Claude, 2026-11-20) — READY_FOR_REVIEW, not started
+
+- **Why:** review #1, a fresh Codex session reviewing `54d1a6b`, returned **REQUEST_CHANGES** (`CODEX_T21_REVIEW_REPORT.md`).
+  - **Medium:** C10 depended on scheduling.
+  - **Low:** there was no race test for assign and unassign of the same pair.
+  - No production defect was found.
+- **Fix:** made by Codex (the test owner) and committed by Claude on Codex's behalf (sandbox git limit; Codex had exited, the change was reviewed and the suite run).
+  - Commit **`2bc6a90`**, merged into the task branch as **`e46b543`**.
+  - **Delta vs `54d1a6b`:** only `tests/Enrollment/EnrollmentConcurrencyTest.php` and `tests/Enrollment/fixtures/enrollment_worker.php`, plus docs. **No production code changed.**
+  - **C10:** the three new assignments go to a second section whose meetings don't overlap section 1's. All six writes must still succeed, with `seq` 1..9 and the exact final state on both sections.
+  - **New C11:** assign vs unassign of one pair, three rounds. Both permitted outcomes are asserted against history and replay.
+  - **Worker:** it now also reports the error message.
+- **Exact re-review target:** the head of `task/T-21-instructor-assignments` at the commit that adds this section. Everything after `e46b543` changes only `ai-coordination/*.md`. Report the full hash you reviewed. Minimum scope: `54d1a6b..<head>`. A full re-check of `229618b..<head>` is welcome.
+- **Verified by Claude at `e46b543` (2026-11-20):**
+  - `php tests/run.php`: **184 passed, 0 failed**, including C10 and C11.
+  - `php -l`: 115 files, 0 failures.
+  - `tests/Core/apache_check.php`: PASS on both document roots.
+  - Real DELETE probe through private Apache: PASS on both roots (anonymous 401, no CSRF 403, unassigned 404, missing section 404, production assign 422, `instructors` `[]`, `PUT` 405).
+- **Open from review #1, no fix requested:**
+  - Mutation checks are reproduced independently for only 6 of 12 (M10, M11, M12, M18, M19, M20); the rest were checked by inspection.
+  - The one-off Apache DELETE probe isn't committed. It lives in Claude's scratch folder; committing it would need a Core-owned test change.
+  - Accepted limitations: the A4 window, and history that isn't tamper-evident against someone able to rewrite both lists.
+- **Reviewer:** the owner assigns one (the fresh Codex review session or AGY when available). Review in a separate worktree at the new head and write the report to the reviewer's report file. Claude has no channel to the reviewers.
+
+---
+
 ## T-21 → independent review (prepared by Claude, 2026-11-20) — REASSIGNED to a fresh CODEX review session
 
 > **Review outcome #1 (2026-11-20):** fresh Codex review of `54d1a6b` → **REQUEST_CHANGES** (`CODEX_T21_REVIEW_REPORT.md`).
