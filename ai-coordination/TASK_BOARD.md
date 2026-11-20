@@ -23,7 +23,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-20 | 4 | Terms & sections catalog | T-02 ✔ | **MERGED** into `main` as `8c2b980` (2026-11-20). AGY APPROVE on `81097d5`, Codex APPROVE on `60ac236`; 163/163 tests, 104/104 lint, Apache PASS on `main`. Not pushed. See `T20_IMPLEMENTATION_REPORT.md` §13 |
 | T-21 | 4 | SectionDirectory, faculty identity port, instructor assignments | T-20 ✔, B-04 ✔ | **MERGED** into `main` as `d83e207` (2026-11-20). Re-review #2 APPROVE on `417ba6a`; 184/184 tests, 115/115 lint, Apache PASS on `main`. Not pushed |
 | T-22 | 4 | Enrollment requests, approval & schedule | T-11, T-21 | PROPOSED |
-| T-30 | 5 | Faculty profiles + FacultyIdentityLookup | T-21, B-04 ✔ | PROPOSED (assignments moved to Team 4 by B-04) |
+| T-30 | 5 | Faculty profiles + FacultyIdentityLookup (teaching assignments belong to Team 4, T-21) | T-21 ✔, B-04 ✔ | PLAN APPROVED (owner 2026-11-20; `docs/plans/T-30-faculty-profiles.md`); implementation not authorized |
 | T-31 | 5 | Class rosters | T-22, T-30 | PROPOSED |
 | T-32 | 5 | Grade entry, submission, finalization | T-31, B-05 | PROPOSED |
 | T-39 | All | Cross-module integration tests | T-32 | PROPOSED |
@@ -198,14 +198,20 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 - **Note from T-20 (owner decision 2026-11-17):** sections have `delivery_mode` (`scheduled`/`tba`/`online_async`). TBA and online-async sections may have no meetings, so they never clash and must still appear in `/api/schedules/me` without time slots. See `docs/plans/T-20-terms-sections.md` §16.
 - **Status:** PROPOSED
 
-### T-30 — Faculty profiles & teaching assignments
+### T-30 — Faculty profiles & FacultyIdentityLookup (teaching assignments are Team 4's, T-21)
 - **Team:** 5
 - **Description (revised for B-04):** Faculty model, repository + mock, `/api/faculty/me`, `/api/faculty/classes` (built from Team 4's `SectionDirectory::sectionIdsForFaculty`), `FacultyDirectory::findByUserId`, and the real `FacultyIdentityLookup` implementation. **No** TeachingAssignment model or assignment endpoint: Team 4 owns assignments (B-04).
 - **Files allowed to change:** `app/Faculty/**`, `routes/faculty.php`, `app/bootstrap.php` (Faculty wiring + swap the `FacultyIdentityLookup` binding), `database/seeders/dev_faculty.php`, `tests/Faculty/*`
 - **Dependencies:** T-21, B-04 ✔
 - **Acceptance criteria:** Faculty sees only own profile and classes. `FacultyIdentityLookup` reports only real, active faculty. Sections now show instructor names. Team 5 keeps no assignment data.
 - **Required tests:** ownership, role matrix, FacultyIdentityLookup output.
-- **Status:** PROPOSED
+- **Plan (approved 2026-11-20):** `docs/plans/T-30-faculty-profiles.md`.
+  - Faculty profiles linked 1:1 to accounts; `findByUserId` resolves B-11.
+  - The real `RepositoryFacultyIdentity`, active = profile active AND account active AND `faculty` role.
+  - Registrar/admin profile routes, `/api/faculty/me` and `/api/faculty/classes`.
+  - Atomic append-only history; a configurable `EmployeeNumberPolicy`.
+  - **No assignment data: Team 4 owns teaching assignments (B-04, T-21).**
+- **Status:** PLAN APPROVED. Implementation (phases 1–6) awaits separate owner authorization.
 
 ### T-31 — Class rosters
 - **Team:** 5
@@ -228,6 +234,7 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
   4. `/api/grades/me` returns only own `finalized` grades. Draft or submitted never reaches students.
   5. Every grade change is audited via Team 2's audit service (actor, grade ID, old/new value).
 - **Required tests:** grade privacy (student never sees draft/submitted, never sees others'), unassigned faculty → 403, invalid values, state transitions, incomplete roster blocks submit, audit entries.
+- **Separation of duties (owner, 2026-11-20, from T-30 Q9):** staff accounts that also hold `faculty` may hold faculty profiles and be assigned to sections. T-32 must therefore stop a user acting as both instructor and approver on the same grades; for example, nobody may finalize grades for a section they teach.
 - **Status:** PROPOSED
 
 ### T-39 — Cross-module integration tests
