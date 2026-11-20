@@ -63,8 +63,8 @@ Academic record (T-11a, implemented; supersedes the earlier sketch): `{ student{
 | GET | /api/sections/{id} | 🔒 | any | — | Section detail |
 | POST | /api/registrar/sections | 🔒 | registrar, admin | ✔ | Create section + meetings |
 | PATCH | /api/registrar/sections/{id} | 🔒 | registrar, admin | ✔ | Capacity can't go below approved count (409); `term_id`, `course_code`, `section_code` immutable |
-| POST | /api/registrar/sections/{id}/instructors | 🔒 | registrar, admin | ✔ | `{faculty_id}`; B-04: Team 4 owns assignments (T-21). Faculty id validated via `FacultyIdentityLookup`; audited |
-| DELETE | /api/registrar/sections/{id}/instructors/{facultyId} | 🔒 | registrar, admin | ✔ | Unassign (T-21); audited |
+| POST | /api/registrar/sections/{id}/instructors | 🔒 | registrar, admin | ✔ | `{faculty_id}` → 201 section (T-21). 422 unknown/inactive/unverifiable faculty (production: every id until T-30). 409 duplicate, cap of 5, or same-term schedule conflict. Audited |
+| DELETE | /api/registrar/sections/{id}/instructors/{facultyId} | 🔒 | registrar, admin | ✔ | → 200 section; 404 not assigned. Never depends on identity or name lookup (T-21). Audited |
 | POST | /api/enrollments | 🔒 | student | ✔ | `{section_id}` only; student resolved from session |
 | GET | /api/enrollments/me | 🔒 | student | — | Own requests, all statuses |
 | GET | /api/schedules/me | 🔒 | student | — | Approved enrollments for `?term_id=` (default current) |
@@ -79,7 +79,7 @@ Enrollment rules (checked in the service, inside one transaction):
 5. No time overlap with the student's `pending`/`approved` meetings in the same term → else 409 with the clashing section.
 6. Status flow: `pending → approved | rejected`; `approved/rejected` are final in MVP ⚠. Students cannot approve.
 
-Section (T-20): `{ id, term_id, course_code, course_title, units, section_code, capacity, approved_count, remaining, delivery_mode: "scheduled"|"tba"|"online_async", meetings:[{day:"MON".."SUN", start:"HH:MM", end:"HH:MM", room}], created_at, updated_at }`. T-21 adds `instructors:[{faculty_id,name}]`.
+Section (T-20): `{ id, term_id, course_code, course_title, units, section_code, capacity, approved_count, remaining, delivery_mode: "scheduled"|"tba"|"online_async", meetings:[{day:"MON".."SUN", start:"HH:MM", end:"HH:MM", room}], created_at, updated_at }`. T-21 adds `instructors:[{faculty_id,name}]` after `meetings` (assignment order; `name` null when unavailable). A section PATCH that would create an instructor schedule conflict → 409.
 - **Delivery mode (owner decision, 2026-11-17):** `delivery_mode` is optional on create (default `scheduled`) and can be changed by PATCH.
 - **Meetings:** a `scheduled` section needs 1–14 meetings. `tba` and `online_async` sections may have 0–14. An empty list is never taken to mean TBA (422).
 - **Overlap:** the rule is unchanged for every mode.

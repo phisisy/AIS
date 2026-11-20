@@ -16,4 +16,7 @@ return static function (Router $router, array $container): void {
     $router->add('GET', '/api/sections/{id}', $guard->authenticated([$sections, 'show']));
     $router->add('POST', '/api/registrar/sections', $guard->roles($staff, [$sections, 'create']));
     $router->add('PATCH', '/api/registrar/sections/{id}', $guard->roles($staff, [$sections, 'update']));
+    // T-21: Team 4 owns instructor-to-section assignments (B-04).
+    $router->add('POST', '/api/registrar/sections/{id}/instructors', $guard->roles($staff, [$sections, 'assignInstructor']));
+    $router->add('DELETE', '/api/registrar/sections/{id}/instructors/{facultyId}', $guard->roles($staff, [$sections, 'unassignInstructor']));
 };
