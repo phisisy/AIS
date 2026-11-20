@@ -148,7 +148,7 @@ final class SectionService
     {
         $this->authorization->requireRole($actor, self::STAFF);
         $result = $this->catalog->unassignInstructor($sectionId, $facultyId, $this->now(), $actor->id);
-        return $this->presentAssignment($result, false);
+        return $this->presentAssignment($result);
     }
 
     /** @param list<Section> $sections */
@@ -175,9 +175,9 @@ final class SectionService
     }
 
     /** Uses the committed transaction result, avoiding a second store read for assignment responses. */
-    private function presentAssignment(array $result, bool $resolveNames = true): array
+    private function presentAssignment(array $result): array
     {
-        $names = $resolveNames ? $this->names($result['faculty_ids']) : [];
+        $names = $this->names($result['faculty_ids']);
         $instructors = [];
         foreach ($result['faculty_ids'] as $id) {
             $instructors[] = ['faculty_id' => $id, 'name' => $names[$id] ?? null];

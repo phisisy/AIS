@@ -35,6 +35,59 @@ test('Assignments: success, exact section shape, audit and order preserving unas
     } finally { removeTestDirectory($dir); }
 });
 
+test('Assignments: unassign resolves remaining names without a direct identity check', function (): void {
+    $dir = tempDirectory();
+    try {
+        [$sections, , $users, $stub] = assignmentFixture($dir);
+        $actor = $users->findById(2);
+        foreach ([10, 11, 12] as $id) { $sections->assignInstructor($actor, 1, assignInput($id)); }
+        $findCalls = $stub->findCalls;
+        $findManyCalls = $stub->findManyCalls;
+        $row = $sections->unassignInstructor($actor, 1, 11);
+        same([['faculty_id' => 10, 'name' => 'Instructor'], ['faculty_id' => 12, 'name' => 'Instructor']], $row['instructors']);
+        same($findManyCalls + 1, $stub->findManyCalls);
+        // The stub's findMany delegates to find once per remaining ID; unassign adds no direct find call.
+        same($findCalls + 2, $stub->findCalls);
+    } finally { removeTestDirectory($dir); }
+});
+
+test('Assignments: failed name lookup does not undo unassign or duplicate its audit', function (): void {
+    $dir = tempDirectory();
+    try {
+        [$sections, , $users, $stub] = assignmentFixture($dir);
+        $actor = $users->findById(2);
+        $sections->assignInstructor($actor, 1, assignInput(10));
+        $sections->assignInstructor($actor, 1, assignInput(11));
+        $findCalls = $stub->findCalls;
+        $findManyCalls = $stub->findManyCalls;
+        $stub->throw = true;
+        $row = $sections->unassignInstructor($actor, 1, 10);
+        same([['faculty_id' => 11, 'name' => null]], $row['instructors']);
+        same($findCalls, $stub->findCalls);
+        same($findManyCalls + 1, $stub->findManyCalls);
+        $store = json_decode(storeBytes($dir), true, 512, JSON_THROW_ON_ERROR);
+        same([['section_id' => 1, 'faculty_id' => 11]], $store['assignments']);
+        $unassigned = array_values(array_filter($store['assignment_history'], static fn (array $entry): bool => $entry['action'] === 'unassigned'));
+        same(1, count($unassigned));
+        same([1, 10], [$unassigned[0]['section_id'], $unassigned[0]['faculty_id']]);
+    } finally { removeTestDirectory($dir); }
+});
+
+test('Assignments: inactive and unknown faculty can still be unassigned', function (): void {
+    $dir = tempDirectory();
+    try {
+        [$sections, $repository, $users, $stub] = assignmentFixture($dir);
+        $actor = $users->findById(2);
+        $sections->assignInstructor($actor, 1, assignInput(10));
+        $sections->assignInstructor($actor, 1, assignInput(11));
+        $stub->rows[10]['active'] = false;
+        same([11], array_column($sections->unassignInstructor($actor, 1, 10)['instructors'], 'faculty_id'));
+        unset($stub->rows[11]);
+        same([], $sections->unassignInstructor($actor, 1, 11)['instructors']);
+        same([], $repository->assignedFacultyIds([1])[1]);
+    } finally { removeTestDirectory($dir); }
+});
+
 test('Assignments: format, unknown identity, failures, missing rows and role checks do not write', function (): void {
     $dir = tempDirectory();
     try {
@@ -68,7 +121,7 @@ test('Assignments: format, unknown identity, failures, missing rows and role che
     } finally { removeTestDirectory($dir); }
 });
 
-test('Assignments: duplicate and sixth are 409; names fail open for display, unassign needs no lookup', function (): void {
+test('Assignments: duplicate and sixth are 409; names fail open for display and unassign', function (): void {
     $dir = tempDirectory();
     try {
         [$sections, $repository, $users, $stub] = assignmentFixture($dir);
@@ -84,7 +137,7 @@ test('Assignments: duplicate and sixth are 409; names fail open for display, una
         $stub->findManyCalls = 0;
         $sections->unassignInstructor($actor, 1, 10);
         same(0, $stub->findCalls);
-        same(0, $stub->findManyCalls);
+        same(1, $stub->findManyCalls);
         same([11, 12, 13, 14], $repository->assignedFacultyIds([1])[1]);
         $stub->throw = false;
         $stub->rows[11] = ['name' => 'Former', 'active' => false];
