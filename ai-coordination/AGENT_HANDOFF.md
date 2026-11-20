@@ -4,10 +4,21 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
-## T-20 — optional AGY review before merge (prepared by Claude, 2026-11-20) — AWAITING OWNER DECISION
+## T-20 — MANDATORY AGY review before merge (owner decision, 2026-11-20) — READY_FOR_AGY_REVIEW
 
-- **Situation:** the three-agent workflow is restored. T-20 has one independent review: Codex APPROVE on `60ac236`. Codex wrote the T-20 phase-1 backend (`b04fec4`), so that review isn't fully independent of the author.
-- **Option:** before merging, the owner may ask AGY to review `592d912..41e8a56`. Everything after `0624eb7` changes only `ai-coordination/*.md`.
+- **Owner decision:** AGY's independent review is mandatory. T-20 may be merged locally only if all of the following hold:
+  - AGY reports **APPROVE** on the **exact final revision**.
+  - No Critical, High or Medium findings, and no merge blockers, remain unresolved.
+  - Tests, `php -l` and the Apache check pass.
+  - The tree is clean.
+  - The merge brings in no unrelated changes.
+- **Exact review target:** the head of `task/T-20-terms-sections` at the commit that adds this section. Report the full hash you reviewed.
+  - The last code change is `0624eb7`. Everything after it changes only `ai-coordination/*.md`.
+  - Review range: `592d912..<head>`.
+  - If anything other than docs changes after your review, the review has to be repeated.
+- **Background:** Codex reviewed `60ac236` (APPROVE) but wrote the phase-1 backend (`b04fec4`), so that review isn't fully independent of the author.
+- **Not started:** Claude has no channel to AGY. The owner starts AGY. Write the report to `ai-coordination/AGY_REVIEW_REPORT.md` using its template.
+- **Worktree:** review in a separate worktree, for example `git worktree add ..\AIS_REVIEW_T20 <head>`. Use your own `APP_RUNTIME_PATH`. Don't run the seeder against a shared runtime. Coordinate the Apache check, because it uses fixed ports.
   - **Priority files for an author-independent review:** `app/Enrollment/{Models,Repositories,Services,Controllers}/*`, `routes/enrollment.php`, and the Enrollment wiring in `app/bootstrap.php`.
   - **Focus areas:** the same as the Codex handoff below.
 - **If the owner skips it:** T-20 merges on the strength of the Codex APPROVE, with the caveat on record.
