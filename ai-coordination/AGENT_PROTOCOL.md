@@ -2,7 +2,19 @@
 
 Established 2026-11-17 by the owner's instruction "Claude + AGY multi-agent synchronization protocol". This file complements `TASK_BOARD.md` (task scope and status) and `PROJECT_CONTEXT.md`; it doesn't replace them.
 
-## Temporary reassignment (owner, 2026-11-17)
+## Three-agent workflow restored (owner, 2026-11-20)
+
+The temporary reassignment below has **ended**. From 2026-11-20:
+
+- **Claude:** lead architecture, planning, integration, code review and final merge preparation.
+- **Codex:** backend development, automated tests and assigned bug fixes. Codex no longer reviews independently.
+- **AGY:** independent QA, security audits and integration checks. Reports go to `AGY_REVIEW_REPORT.md`.
+
+Reports written during the reassignment (`CODEX_REVIEW_REPORT.md`) are kept as history.
+
+An agent's current activity is still recorded only from that agent's own report, or from the owner. "Restored" means AGY is available for assignment, not that AGY is currently working.
+
+## Temporary reassignment (owner, 2026-11-17) — ENDED 2026-11-20
 
 - **AGY:** has hit its weekly usage limit and is `UNAVAILABLE_USAGE_LIMIT`, with no active assignments. It may return after the limit resets.
 - **Codex:** takes over AGY's role as the independent QA, security and integration reviewer, with immediate effect. Wherever this protocol says "AGY" for reviewing, read "the current independent reviewer". That is Codex until the owner reassigns the role.
@@ -43,6 +55,17 @@ Rules for what an agent may claim:
 `IDLE`, `PLANNING`, `IMPLEMENTING`, `TESTING`, `REVIEWING`, `BLOCKED`, `WAITING_FOR_OWNER`, `COMPLETED`, `UNKNOWN` and `UNAVAILABLE_USAGE_LIMIT`.
 
 The task-level statuses `READY_FOR_AGY_REVIEW` and `READY_FOR_CODEX_REVIEW` are used in `AGENT_TASKS.md`.
+
+## Worktrees and runtime data (three agents)
+
+- Each agent that edits files works in its own worktree, on its own task branch.
+  - Claude: the main folder `AIS_SYSTEM`.
+  - Codex: for example `..\AIS_CODEX_<task>`.
+  - AGY: a read-only review worktree, for example `..\AIS_REVIEW_<task>`, checked out at the exact commit under review.
+- The owner creates worktrees, or approves Claude creating them, with `git worktree add`.
+- **Runtime data:** every agent sets its own `APP_RUNTIME_PATH`, outside all worktrees, for test runs and seeders. Nobody runs a seeder or a test against another agent's runtime.
+- **Apache check:** it uses fixed local ports, so only one agent runs it at a time. The owner or Claude coordinates this.
+- **Integration:** a task branch is merged into `main` only by Claude, and only with the owner's approval. Other agents rebase or merge from `main` only when told to.
 
 ## File ownership and locking
 

@@ -4,6 +4,18 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
+## T-20 — optional AGY review before merge (prepared by Claude, 2026-11-20) — AWAITING OWNER DECISION
+
+- **Situation:** the three-agent workflow is restored. T-20 has one independent review: Codex APPROVE on `60ac236`. Codex wrote the T-20 phase-1 backend (`b04fec4`), so that review isn't fully independent of the author.
+- **Option:** before merging, the owner may ask AGY to review `592d912..41e8a56`. Everything after `0624eb7` changes only `ai-coordination/*.md`.
+  - **Priority files for an author-independent review:** `app/Enrollment/{Models,Repositories,Services,Controllers}/*`, `routes/enrollment.php`, and the Enrollment wiring in `app/bootstrap.php`.
+  - **Focus areas:** the same as the Codex handoff below.
+- **If the owner skips it:** T-20 merges on the strength of the Codex APPROVE, with the caveat on record.
+- **Status:** not assigned to AGY. Claude has no channel to AGY; the owner starts it.
+- **Re-verified at `41e8a56` (2026-11-20):** 163/163 tests, 104/104 lint, Apache PASS on both document roots, clean tree.
+
+---
+
 ## T-20 — Terms & Sections → CODEX independent review (prepared by Claude, 2026-11-17) — REVIEWED
 
 > **Outcome:** Codex APPROVE on `60ac236` (`CODEX_REVIEW_REPORT.md`). `60ac236..6bec6e6` changes only `ai-coordination/*.md`. The post-review integration check passed (see `T20_IMPLEMENTATION_REPORT.md` §12).
