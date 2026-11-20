@@ -14,6 +14,7 @@ Status key: **OPEN** (needs owner decision) · **DEFERRED** (accepted gap) · **
 | B-08 | Low | Enrollment eligibility beyond MVP rules | OPEN | T-22 |
 | B-09 | Medium | Persistent session revocation | DEFERRED | — |
 | B-10 | Low | Frontend origin (Team 1) | OPEN | Team 1 integration |
+| B-11 | Medium | Faculty user id ↔ Team 5 `faculty_id` mapping | OPEN (recorded 2026-11-20) | T-31 (unblocked by T-30) |
 
 ## B-01 — No Git repository (Critical)
 The review process needs real diffs ("inspect the actual changes", "don't overwrite uncommitted changes").
@@ -63,3 +64,9 @@ MVP: mock repositories keep an `auth_version` per user, and every request checks
 
 ## B-10 — Frontend origin (Low)
 API is same-origin, with session cookies and no CORS. Team 1 pages must be served by this same app (`public/`) or a same-origin proxy.
+
+## B-11 — Faculty user id ↔ `faculty_id` (Medium)
+- **The mismatch:** B-07 `FacultyStudentVisibility::sharedSections(int $facultyUserId, …)` is keyed by the Team 2 **user id**. T-21 assignments and `SectionDirectory` use the Team 5 **`faculty_id`**.
+- **The mapping** needs `FacultyDirectory::findByUserId` (T-30). T-31 uses it: session user id → `faculty_id` → `SectionDirectory::isAssigned` / `sectionIdsForFaculty`, which also require an active identity (T-21 A14). If the mapping is missing or the lookup fails, access is denied.
+- **Until T-30 and T-31:** `DenyAllFacultyVisibility` stays wired.
+- **Unblocked by:** T-30. **Consumer:** T-31. Recorded by the owner's T-21 approval, 2026-11-20. See `docs/plans/T-21-instructor-assignments.md` §8.

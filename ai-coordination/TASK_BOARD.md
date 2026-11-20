@@ -21,7 +21,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-11b | 3 | Course catalog, curriculum, real enrollment/grade summaries | T-11a, D1, T-22, T-32 | PROPOSED (not approved) |
 | T-06 | 2 | Protected admin registry + owner-only recovery CLI | T-03 ✔ | PROPOSED (design conditionally approved; `PROPOSAL_ADMIN_PROTECTION_RECOVERY.md` v2; implementation not approved) |
 | T-20 | 4 | Terms & sections catalog | T-02 ✔ | **MERGED** into `main` as `8c2b980` (2026-11-20). AGY APPROVE on `81097d5`, Codex APPROVE on `60ac236`; 163/163 tests, 104/104 lint, Apache PASS on `main`. Not pushed. See `T20_IMPLEMENTATION_REPORT.md` §13 |
-| T-21 | 4 | SectionDirectory, faculty identity port, instructor assignments | T-20, B-04 ✔ | PROPOSED (scope revised for B-04; max 5 instructors per section confirmed by owner, Q7) |
+| T-21 | 4 | SectionDirectory, faculty identity port, instructor assignments | T-20 ✔, B-04 ✔ | IN_PROGRESS (APPROVED by owner 2026-11-20; plan `docs/plans/T-21-instructor-assignments.md`; branches `task/T-21-instructor-assignments` (Claude) and `task/T-21-impl` (Codex)) |
 | T-22 | 4 | Enrollment requests, approval & schedule | T-11, T-21 | PROPOSED |
 | T-30 | 5 | Faculty profiles + FacultyIdentityLookup | T-21, B-04 ✔ | PROPOSED (assignments moved to Team 4 by B-04) |
 | T-31 | 5 | Class rosters | T-22, T-30 | PROPOSED |
@@ -152,14 +152,32 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 - **Required tests:** listing/filtering, meeting validation, capacity rules, role matrix.
 - **Status:** **MERGED** into `main` as `8c2b980` (owner authorization 2026-11-20, after the mandatory AGY review: APPROVE on `81097d5`, no Critical/High/Medium, no blockers). Post-merge on `main`: 163/163 tests, 104/104 `php -l`, Apache PASS on both document roots. Not pushed.
 
-### T-21 — SectionDirectory + InstructorLookup interface
+### T-21 — SectionDirectory, faculty identity port, instructor assignments
 - **Team:** 4
-- **Description (revised for B-04, owner 2026-11-17; scope to be confirmed):** `SectionDirectory` (`findSection`, `approvedStudentIds`, `isAssigned`, `sectionIdsForFaculty`, `assignedFacultyIds`), the `FacultyIdentityLookup` port (implemented by Team 5 in T-30; `UnavailableFacultyIdentity` refuses every id until then), the authoritative instructor assignment endpoints `POST/DELETE /api/registrar/sections/{id}/instructors`, append-only `assignment_history` written in the same transaction, and `instructors` in section JSON. See `docs/plans/T-20-terms-sections.md` §9. Replaces the earlier `InstructorLookup` design.
-- **Files allowed to change:** `app/Enrollment/**` (including `Contracts/`), `routes/enrollment.php`, `app/bootstrap.php` (Enrollment wiring), `tests/Enrollment/*`, `README.md`
-- **Dependencies:** T-20, B-04 ✔
-- **Acceptance criteria:** Interfaces match `API_CONTRACTS.md` §3. Only registrar/admin assign (server-side). Unknown, inactive or unverifiable faculty ids → 422 (fail closed). Duplicate assignment → 409. At most 5 instructors per section (owner, Q7) → 409 above that. Each successful change writes exactly one audit entry atomically; failures write none. No faculty data copied (ids only; names resolved at read time).
-- **Required tests:** directory unit tests, role matrix, fail-closed lookup, duplicate, audit atomicity, section JSON includes `instructors`.
-- **Status:** PROPOSED
+- **Owner approval (2026-11-20):** APPROVED. Plan: `docs/plans/T-21-instructor-assignments.md`, with Q1–Q4 decided and the owner's additions in §1.1.
+- **Description:**
+  - The `SectionDirectory` contract and `SectionSummary`.
+  - The `FacultyIdentityLookup` port and `FacultyIdentity` (Team 5 implements it in T-30). Production uses `UnavailableFacultyIdentity`, which refuses every assignment.
+  - `POST`/`DELETE /api/registrar/sections/{id}/instructors`.
+  - `instructors` in the section JSON.
+  - Append-only `assignment_history` in the same transaction.
+  - Instructor schedule conflict prevention.
+- **Files allowed to change:** plan §12:
+  - Claude: `app/Enrollment/Contracts/*`, `app/bootstrap.php` (Enrollment block), `routes/enrollment.php`, `README.md` (Enrollment section), `app/Students/Contracts/FacultyStudentVisibility.php` (docblock only, owner Q2), the plan and `ai-coordination/*`.
+  - Codex: `app/Enrollment/{Models/Section,Repositories/*,Services/SectionService,Services/RepositorySectionDirectory,Controllers/SectionController}.php`, `tests/Enrollment/**` and `ai-coordination/T21_IMPLEMENTATION_REPORT.md`.
+- **Dependencies:** T-20 ✔, B-04 ✔. Real faculty verification needs T-30 (until then production refuses every assignment, by owner decision). B-11 affects T-31.
+- **Acceptance criteria (plan §10, plus the owner's requirements):**
+  - Registrar/admin only, with CSRF. Unknown, inactive or unverifiable faculty → 422 (fail closed).
+  - Duplicate → 409. More than 5 instructors per section → 409.
+  - Overlapping meetings for the same instructor in the same term → **409**, checked atomically in the store lock. All actual meetings count, including those of `tba` and `online_async` sections (Q1).
+  - A section PATCH that would create a conflict → 409.
+  - Exactly one audit entry per successful change, in the same transaction; failures write none.
+  - Corrupt assignment or history data fails closed.
+  - Retained assignments of inactive faculty are kept and shown, but grant no access (Q4, A14). New assignments to inactive faculty → 422.
+  - Test doubles only under `tests/`.
+  - T-20 exact-response tests updated without weakening them. Backward-compatible store loading.
+- **Required tests:** plan §9: unit, directory, store, HTTP matrix, concurrency C6–C10, production fail-closed, mutations M9–M20.
+- **Status:** IN_PROGRESS. Phase 1 (contracts, Claude) done; phase 2 (Codex) assigned, not confirmed.
 
 ### T-22 — Enrollment requests, approval & schedule
 - **Team:** 4
