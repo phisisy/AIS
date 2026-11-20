@@ -296,6 +296,73 @@ with no HTTP route. It offers `findById`, `findByUserId` (summary fields only) a
 status `active`, and an active account holding `student`. Team 4 enforces every
 other enrollment requirement.
 
+## Enrollment: terms and sections (Team 4, T-20)
+
+All reads require an active signed-in user. Writes require registrar or admin,
+plus `X-CSRF-Token`; write services also enforce the staff role.
+
+| Method | Path | Result / query |
+|---|---|---|
+| GET | `/api/terms` | `data.terms`, ordered by start date then id; no pagination |
+| POST | `/api/registrar/terms` | 201 `data.term`, "Term created." |
+| PATCH | `/api/registrar/terms/{id}` | 200 `data.term`, "Term updated." |
+| GET | `/api/sections` | `data.sections` and `data.pagination`; `?term_id=&course=&search=&page=&per_page=` |
+| GET | `/api/sections/{id}` | `data.section`; 404 if missing |
+| POST | `/api/registrar/sections` | 201 `data.section`, "Section created." |
+| PATCH | `/api/registrar/sections/{id}` | 200 `data.section`, "Section updated." |
+
+Terms require `code`, `name`, `start_date`, `end_date`; `is_current` and
+`enrollment_open` are strict booleans defaulting to false. Codes are trimmed,
+uppercased, unique (409), and immutable. Real dates use `YYYY-MM-DD`, with the
+end after the start, including after partial updates. Terms may overlap.
+Setting a term current clears the others atomically; zero current terms is
+allowed. Enrollment being open is independent of a term being current.
+
+Sections require `term_id`, `course_code`, `course_title`, `units`,
+`section_code`, `capacity`, and `meetings`. The term must exist (422).
+Course and section codes are trimmed and uppercased; the term/course/section
+triple is unique (409), and those three fields are immutable. Units are integers
+1–12 and capacity is an integer 1–1000. `approved_count` starts at zero and is
+never client-writable; reducing capacity below it returns 409. `remaining` is
+computed as capacity minus approved count, never stored.
+
+`delivery_mode` is optional: `scheduled` (default), `tba` or `online_async`,
+and PATCH may change it. A `scheduled` section needs at least one meeting.
+Only a section explicitly set to `tba` or `online_async` may have no meetings.
+An empty meeting list is never taken to mean TBA (422). The mode/meeting pairing
+is re-checked on the merged row during PATCH.
+
+Meetings are up to 14 objects with exactly `day`, `start`, `end`, `room`. Days are
+`MON` through `SUN`; times are zero-padded `HH:MM` with start before end.
+Rooms are trimmed, 1–30 characters, without control or format characters.
+Same-day overlaps are rejected (422); back-to-back meetings are allowed.
+Meetings are sorted by weekday then start time; PATCH replaces the whole list.
+Names and titles also reject control and format characters. Unknown or immutable
+body fields return 422 `Unknown field.`; empty PATCH bodies return 422.
+
+There is no hard delete for terms or sections. Archival is a future task: see
+the plan's "Future archival requirements".
+
+Section lists default to all terms, ordered by term id, course code, section
+code, then id. `term_id` and normalized `course` are exact filters; `search`
+is a case-insensitive substring of course code, title or section code (up to
+100 characters). Pagination defaults to page 1, 20 per page; page is at most
+1,000,000 and per-page at most 100. Unknown query parameters are ignored.
+
+Mock storage is one file, `$runtime/enrollment/enrollment.json`, holding
+`terms` and `sections`. Every read and write validates the full snapshot;
+corruption fails closed with a generic 500. Each write uses one transaction
+for row-dependent checks and changes. MySQL remains unavailable until T-40.
+Instructor assignment and student enrollment are deferred to T-21 and T-22.
+
+**D1 / T-11b:** course code, title and units currently receive format validation
+only. A future course catalog must supply a provider for code validation and
+reconcile existing section data if title and units become derived fields.
+
+Development seeding belongs to phase 2b: the planned command is
+`php database/seeders/dev_sections.php` (not supplied by this backend phase).
+It will create fictional terms and sections only in an empty mock catalog.
+
 ## Core interfaces
 
 - `app/bootstrap.php` returns an explicit array container with `config`,

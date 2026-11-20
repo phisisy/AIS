@@ -56,11 +56,15 @@ Academic record (T-11a, implemented; supersedes the earlier sketch): `{ student{
 
 | Method | Path | Auth | Roles | CSRF | Rule |
 |---|---|---|---|---|---|
-| GET | /api/terms | 🔒 | any | — | List academic terms; one `is_current` |
-| GET | /api/sections | 🔒 | any | — | `?term_id=&course=&search=`; includes capacity, remaining slots, meetings, instructor |
+| GET | /api/terms | 🔒 | any | — | List academic terms; at most one `is_current` (T-20) |
+| POST | /api/registrar/terms | 🔒 | registrar, admin | ✔ | Create term; 409 duplicate `code` (T-20) |
+| PATCH | /api/registrar/terms/{id} | 🔒 | registrar, admin | ✔ | `code` immutable; `is_current:true` clears others atomically (T-20) |
+| GET | /api/sections | 🔒 | any | — | `?term_id=&course=&search=&page=&per_page=`; includes capacity, remaining slots, meetings; instructors from T-21 |
 | GET | /api/sections/{id} | 🔒 | any | — | Section detail |
 | POST | /api/registrar/sections | 🔒 | registrar, admin | ✔ | Create section + meetings |
-| PATCH | /api/registrar/sections/{id} | 🔒 | registrar, admin | ✔ | Capacity can't go below approved count (409) |
+| PATCH | /api/registrar/sections/{id} | 🔒 | registrar, admin | ✔ | Capacity can't go below approved count (409); `term_id`, `course_code`, `section_code` immutable |
+| POST | /api/registrar/sections/{id}/instructors | 🔒 | registrar, admin | ✔ | `{faculty_id}`; B-04: Team 4 owns assignments (T-21). Faculty id validated via `FacultyIdentityLookup`; audited |
+| DELETE | /api/registrar/sections/{id}/instructors/{facultyId} | 🔒 | registrar, admin | ✔ | Unassign (T-21); audited |
 | POST | /api/enrollments | 🔒 | student | ✔ | `{section_id}` only; student resolved from session |
 | GET | /api/enrollments/me | 🔒 | student | — | Own requests, all statuses |
 | GET | /api/schedules/me | 🔒 | student | — | Approved enrollments for `?term_id=` (default current) |
@@ -75,7 +79,11 @@ Enrollment rules (checked in the service, inside one transaction):
 5. No time overlap with the student's `pending`/`approved` meetings in the same term → else 409 with the clashing section.
 6. Status flow: `pending → approved | rejected`; `approved/rejected` are final in MVP ⚠. Students cannot approve.
 
-Section: `{ id, term_id, course_code, course_title, units, section_code, capacity, approved_count, remaining, meetings:[{day:"MON".."SUN", start:"HH:MM", end:"HH:MM", room}], instructors:[{faculty_id,name}] }`
+Section (T-20): `{ id, term_id, course_code, course_title, units, section_code, capacity, approved_count, remaining, delivery_mode: "scheduled"|"tba"|"online_async", meetings:[{day:"MON".."SUN", start:"HH:MM", end:"HH:MM", room}], created_at, updated_at }`. T-21 adds `instructors:[{faculty_id,name}]`.
+- **Delivery mode (owner decision, 2026-11-17):** `delivery_mode` is optional on create (default `scheduled`) and can be changed by PATCH.
+- **Meetings:** a `scheduled` section needs 1–14 meetings. `tba` and `online_async` sections may have 0–14. An empty list is never taken to mean TBA (422).
+- **Overlap:** the rule is unchanged for every mode.
+- **For T-22:** sections with no meetings never cause a schedule clash.
 Enrollment: `{ id, student_id, section_id, term_id, status, requested_at, decided_at?, decided_by?, reason? }`
 
 ### Team 5 — Faculty & Grades
@@ -91,7 +99,6 @@ Enrollment: `{ id, student_id, section_id, term_id, status, requested_at, decide
 | GET | /api/grades/me | 🔒 | student | — | Own **finalized** grades only |
 | GET | /api/registrar/grades | 🔒 | registrar, admin | — | `?section_id=&status=submitted` |
 | PATCH | /api/registrar/grades/sections/{id}/finalize | 🔒 | registrar, admin | ✔ | submitted → finalized ⚠ (B-05) |
-| POST | /api/registrar/teaching-assignments | 🔒 | registrar, admin | ✔ | `{faculty_id, section_id}` ⚠ (B-04) |
 
 `{id}` under `/api/faculty/classes/` is the **section ID**.
 Grade: `{ id, section_id, student_id, value, remarks?, status: "draft"|"submitted"|"finalized", updated_at }`
@@ -115,13 +122,16 @@ findByUserId(int $userId): ?StudentSummary
 // Team 4 — App\Enrollment\Contracts\SectionDirectory
 findSection(int $sectionId): ?SectionSummary              // id, term_id, course_code, section_code
 approvedStudentIds(int $sectionId): int[]                 // the roster source for Team 5
-// Team 4 — App\Enrollment\Contracts\InstructorLookup  (implemented by Team 5)
-instructorsForSection(int $sectionId): array              // [{faculty_id, name}]
+isAssigned(int $facultyId, int $sectionId): bool          // B-04: Team 4 owns assignments (T-21)
+sectionIdsForFaculty(int $facultyId): int[]               // used by Team 3 / Team 5 for class access
+assignedFacultyIds(int $sectionId): int[]
+// Team 4 — App\Enrollment\Contracts\FacultyIdentityLookup  (port defined by Team 4, implemented by Team 5 in T-30;
+//          replaces InstructorLookup; until T-30 every id is refused)
+find(int $facultyId): ?FacultyIdentity                    // faculty_id, display_name, active
+findMany(array $facultyIds): array
 
 // Team 5 — App\Faculty\Contracts\FacultyDirectory
-findByUserId(int $userId): ?FacultySummary
-isAssigned(int $facultyId, int $sectionId): bool
-sectionIdsForFaculty(int $facultyId): int[]               // used by Team 3 for faculty roster access
+findByUserId(int $userId): ?FacultySummary              // isAssigned/sectionIdsForFaculty moved to SectionDirectory (B-04)
 // Team 5 — App\Faculty\Contracts\GradeReader
 finalizedGradesForStudent(int $studentId): array          // read-only, finalized only
 ```
@@ -134,5 +144,5 @@ finalizedGradesForStudent(int $studentId): array          // read-only, finalize
 | 2 ↔ 4 | All enrollment routes use Team 2 middleware. Students act only on their own profile, resolved from the session. Registrar/admin roles gate approval. |
 | 2 ↔ 5 | `User.id → faculty.user_id`. Faculty role + teaching assignment = access to a class. Role alone = nothing. |
 | 3 ↔ 4 | Enrollment stores `student_id` (Team 3 ID), checks existence + status via `StudentDirectory`. Team 3 stores no enrollment data. |
-| 4 ↔ 5 | Rosters = `SectionDirectory::approvedStudentIds`. Team 5 owns teaching assignments; Team 4 shows instructors via `InstructorLookup`. |
+| 4 ↔ 5 | Rosters = `SectionDirectory::approvedStudentIds`. **B-04 (owner, 2026-11-17): Team 4 owns the authoritative instructor-to-section assignment** (validated, audited, server-side authorization); Team 5 owns faculty profiles and grades, implements `FacultyIdentityLookup`, and reads assignments only via `SectionDirectory`, keeping no conflicting assignment data. No duplicated faculty data. |
 | 3 ↔ 5 | Grades reference `student_id`. Team 5 copies no profile data and serves names via `StudentDirectory`. Team 3's academic record does not embed grades in MVP. |
