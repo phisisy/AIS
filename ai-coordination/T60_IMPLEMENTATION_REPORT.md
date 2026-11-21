@@ -77,3 +77,47 @@ PDO failures become `RuntimeException('User repository unavailable.')` without S
 - `php tests/run.php`: **198 passed, 0 failed, 198 total** (191 baseline plus seven new offline contract cases).
 - `php -l` across **129 PHP files**: **0 failures**.
 - Online contract: **NOT RUN**. When the guarded `ais_test` environment is enabled, the same seven cases reset and migrate before each run, then exercise lookup, search, writes, last-admin protection, audit shape/sequence and rollback through MySQL.
+
+---
+
+# T-60 Phase 6b implementation report (2026-11-21)
+
+Baseline: `task/T-60-impl` at `a820eac`. No Git write, application wiring, database connection, reset or migration execution was performed.
+
+## Files
+
+- `app/Students/Repositories/MySQLStudentRepository.php`: injected-PDO student adapter with read snapshots, locked writes, and per-student academic history.
+- `app/Students/Repositories/MySQLProgramCatalog.php`: read-only catalog adapter.
+- `tests/Students/StudentRepositoryContract.php`: seven shared cases for both backends.
+- `tests/Students/StudentRepositoryContractTest.php`: always-on mock fixture.
+- `tests/Students/StudentRepositoryContractMySQLTest.php`: guarded `ais_test` fixture and an additional foreign-key case.
+- This report (append only).
+
+## Mock-to-MySQL behavior mapping
+
+| Mock behavior | MySQL behavior |
+|---|---|
+| `findById`, `findByUserId` return a validated `Student` or `null` | Prepared single-row selects hydrate native integer fields and UTC timestamps in `Student::FIELDS` order, then call `Student::fromArray`; missing returns `null` |
+| `search` filters program and status exactly, case-insensitive substring on number/first/last name, ordered id pages and total | Fixed SQL predicates with escaped `LOWER(...) LIKE`, `ORDER BY id`, count and page in one read transaction; returned rows pass the model |
+| One exclusive JSON-store lock per create/update | One PDO transaction obtains `repository_locks('students') FOR UPDATE`; all checks, writes and history append occur before commit; any exception rolls back |
+| `create` returns both duplicate error keys when both collide | Both in-lock lookups run before insert; the same 409 `Validation failed.` with the same field messages; insert uses AUTO_INCREMENT |
+| `update` rejects empty/immutable changes, 404s missing rows, and calls `$check` on the merged row inside the lock | Same allowlist and exceptions; `$check` runs after locked read and before model validation or SQL write; callback exceptions propagate unchanged |
+| Creation and update add one history entry per changed academic field, in field order; `actor_id=0` means system | Inserts share the profile transaction and allocate `MAX(seq)+1` under the students lock; history returns typed `year_level`, stable keys, seq order, page and total |
+| Program catalog exact lookup and list | Prepared binary-collation lookup returns `Program::fromArray` or `null`; list is ordered by code and each row passes the model |
+
+All driver failures are mapped to generic `RuntimeException` messages without SQL or driver text. The adapters take only an injected PDO, read no environment variables, open no connections, and issue no DDL.
+
+## Deviations and limits
+
+- `students.id` is AUTO_INCREMENT; a rolled-back insert can leave an entity-id gap. Academic history `seq` remains gap-free.
+- The SQL foreign keys require an existing user and program. Direct mock repository calls do not check these relationships; the service checks program existence and account identity before repository calls.
+- SQL `DATETIME` preserves the service's UTC-second timestamp format. Arbitrary strings accepted by the mock model cannot be stored in SQL.
+- `MySQLProgramCatalog::all()` sorts by code, whereas the JSON catalog retains file order. The current caller sorts programs by code. Rare Unicode case mappings may differ between SQL `LOWER()` and PHP `mb_strtolower`.
+- SQL reads validate returned rows rather than the entire store. The schema and app privileges prevent most corruption; cross-row verification remains Phase 8 work.
+
+## Verification
+
+- `APP_RUNTIME_PATH` was set to `%TEMP%\ais-codex-t60-phase6b-runtime`, outside OneDrive; `AIS_MYSQL_TESTS=0`.
+- `php tests/run.php`: **205 passed, 0 failed, 205 total** (198 baseline plus seven new offline contract cases).
+- `php -l` on all **134** PHP files: **0 failures**.
+- Online contract: **NOT RUN**. When enabled, each of the seven shared cases plus the MySQL-only foreign-key case resets and migrates guarded `ais_test`, then seeds referenced users and programs through the tester connection before exercising the adapters. No MariaDB connection was attempted in this sandbox.
