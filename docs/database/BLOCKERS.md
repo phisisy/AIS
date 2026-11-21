@@ -128,3 +128,13 @@ All MySQL tests are files ending `MySQLTest.php`. They register tests only when 
 - in Phase 7 tests
 
 It is **not equivalent** to the JSON mock's per-request snapshot replay. Between runs, a corrupt row that a request doesn't read won't make that request fail. Per-row model validation, the DB constraints and the append-only grants narrow, but don't close, that gap (OQ-4, accepted).
+
+## Phase 5 verification: remaining limitations (recorded 2026-11-21, owner request)
+
+1. **Strict mode and UTC have not been tested against a server that isn't already configured that way.**
+   - `Database::connect` forces `sql_mode` and `time_zone='+00:00'` on every connection (S3).
+   - The local server is already strict and UTC globally, so the online test shows the session values but not that the connection settings *override* a lax server.
+   - To close this: a test against a server, or a session, whose global defaults are non-strict and non-UTC. Changing global settings needs root and an owner decision.
+2. **MariaDB 10.4.32 is development-only** (end-of-life, S7). Production must use a supported release, for example 10.11 LTS, and Phase 7 must be re-run on it before any cutover.
+3. **`migrate.php status` on an empty database** prints "No changes." instead of listing the pending migrations. Cosmetic, with no safety impact. It goes to Codex in a later round.
+
