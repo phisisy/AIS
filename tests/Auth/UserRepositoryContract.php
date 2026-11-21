@@ -37,6 +37,8 @@ function userRepositoryContract(string $backend, callable $factory): void
         same([], $repo->search('', 9, 2)['users']);
         same(2, $repo->search(' ADMIN ', 1, 10)['total']);
         same(1, $repo->search('%_!', 1, 10)['total']);
+        same(1, $repo->search('%', 1, 10)['total']);
+        same(1, $repo->search('_', 1, 10)['total']);
         same(0, $repo->search('no match', 1, 10)['total']);
     });
 

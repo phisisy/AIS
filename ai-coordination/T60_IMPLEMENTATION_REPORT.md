@@ -1,3 +1,51 @@
+# T-60 implementation report
+
+## T-60 review fixes (A) and Phase 6c (B), 2026-11-21
+
+Baseline: `task/T-60-impl` at `82d3e24`. No Git write, database connection, reset, migration execution, app wiring, or cutover was performed.
+
+### Part A: review fixes, tests only
+
+Files: `tests/Database/MySQLTestSupport.php`, `tests/Auth/UserRepositoryContract.php`, `tests/Auth/UserRepositoryContractMySQLTest.php`, `tests/Students/StudentRepositoryContract.php`, `tests/Students/StudentRepositoryContractMySQLTest.php`, and this report.
+
+| Finding | Test behavior |
+|---|---|
+| M1 | `connectApp()` requires `AIS_MYSQL_TEST_APP_PASSWORD`, connects as `ais_test_app`, checks the live test schema/port/account, and requires `CURRENT_USER()` to start `ais_test_app@`. The user, student, and program adapters use that connection; owner connection remains for reset, migrations, and fixtures. An unset app password makes an enabled contract case fail loudly. |
+| M2 | Shared user and student search cases assert that `%` alone and `_` alone each find exactly the literal fixture row. |
+| L3(a) | The owner injects a colliding audit id. An app transaction changes a user and advances the audit counter before the duplicate-key failure; the test expects a sanitized exception, unchanged user, unchanged counter, and only the injected audit row. |
+| L3(b) | The owner inserts a valid history row at the maximum `INT UNSIGNED` seq. A profile update succeeds before its history insert exceeds that range; the test expects a sanitized exception and unchanged profile/history. |
+| L3(c) | A non-UTC audit timestamp is rejected without moving `last_seq` or adding an audit row. |
+| L3(d) | The owner temporarily disables CHECK enforcement for its own session, corrupts a student history value, restores enforcement, and verifies that an app read fails closed. |
+
+Deviations: none in production behavior. The new fault-injection cases are MySQL-only and remain unverified until an online run.
+Counts: four new MySQL-only cases; the two wildcard checks extend existing shared cases, so Part A adds no offline test cases.
+
+### Part B: catalog adapter and shared contract
+
+Files: `app/Enrollment/Repositories/MySQLCatalogRepository.php`, `tests/Enrollment/CatalogRepositoryContract.php`, `tests/Enrollment/CatalogRepositoryContractTest.php`, `tests/Enrollment/CatalogRepositoryContractMySQLTest.php`, and this report.
+
+| Mock behavior | MySQL behavior |
+|---|---|
+| Terms ordered by start date/id; exact code 409; one current term; merged `$check` in the lock | Prepared reads and writes, `repository_locks('enrollment') FOR UPDATE`, the same validations/messages and current switch in one transaction |
+| Sections use a unique term/course/section triple, known term, valid delivery mode/meetings, capacity check, computed `remaining` | In-lock checks, `Section::fromArray`, persisted fields only, meetings replaced through `position`, and `remaining` computed by the model |
+| Search filters, case-insensitive literal substring, total, ordering and pagination | Exact filters, escaped `LOWER(...) LIKE ? ESCAPE '!'`, ordered id page and consistent read snapshot |
+| Assignment order, section ids for faculty, five-instructor cap, conflicts on assign/PATCH | `assigned_seq` order; same 404/409 messages; same-term meeting overlap checked under the lock, including all delivery modes; back-to-back permitted |
+| One history row per successful assignment change, gap-free global seq | Sequence from the locked enrollment row; history and current assignment commit or roll back together |
+
+The shared contract runs against the mock offline and MySQL online. The online fixture creates referenced users and faculty through the owner connection, then constructs the repository with the guarded app connection. MySQL-only cases inspect history sequence, rollback after an absent faculty FK, and approved-count capacity protection.
+Counts: six shared cases (six offline mock cases and six online MySQL cases), plus three MySQL-only cases.
+
+Deviations: `section_instructors.faculty_id` and history actor/faculty ids have foreign keys, so a direct repository call with a missing faculty or actor fails with generic `RuntimeException('Catalog repository unavailable.')`; the JSON mock accepts such ids. SQL `DATETIME` accepts the service's UTC-seconds timestamps, while the mock can store arbitrary strings. Entity ids use AUTO_INCREMENT and may have gaps after rollback; assignment history seq remains gap-free. SQL reads validate returned rows and meeting positions; they do not replay the complete history as the mock snapshot does. The MySQL fixture's faculty inserts are test setup, not a faculty repository.
+
+### Verification
+
+- `APP_RUNTIME_PATH=C:/Users/bhill/AppData/Local/Temp/t60_runtime`, outside OneDrive; `AIS_MYSQL_TESTS=0`.
+- Offline suite: **211 passed, 0 failed, 211 total** (205 baseline plus six catalog mock cases).
+- `php -l` on **138 PHP files**: **0 failures**.
+- Online contract and fault-injection cases: **NOT RUN**. The sandbox cannot reach MariaDB; no connection was attempted.
+
+---
+
 # T-60 Phase 5 implementation report (2026-11-21)
 
 ## Files
