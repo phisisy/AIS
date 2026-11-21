@@ -53,3 +53,14 @@ No Critical or High findings; nothing blocks 6c. The Medium and Low items should
 - **L1, L2, L4, L5:** Claude fixes the docs now.
 - **M1, M2, L3:** assigned to Codex as part A of the next round, before or alongside 6c (part B). 6c applies the same corrected patterns from the start.
 - **I1:** carried into Phase 8.
+
+## Resolution status (2026-11-21)
+
+- **Codex** (`a0eef4f`, committed by Claude):
+  - **M1 fixed.** The repositories under test run on a guarded `ais_test_app` connection, which proves the grants are sufficient: all MySQL contract cases pass.
+  - **M2 fixed.** Literal `%` and `_` searches added.
+  - **L3 fixed.** Driver-failure rollback, the non-UTC audit timestamp, history-failure rollback and corrupt-history fail-closed are now tested.
+- **Claude** (`784148f`): **L1, L2, L4 and L5 fixed** in the docs.
+- **I1** carried into Phase 8.
+- **6c** was written with the same corrected patterns (`cccd8df`).
+
