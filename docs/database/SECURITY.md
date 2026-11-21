@@ -1,6 +1,6 @@
 # Database security (T-60)
 
-> **Status: PROPOSED — not approved.** The SQL below is **text only**: nothing has been executed. The owner (or someone the owner names) runs account and database creation on their own machine after approval. Agents never run it.
+> **Status: CONDITIONALLY APPROVED (owner, 2026-11-21; safeguards S1–S10 in `docs/plans/T-60-database-architecture.md` §0). Implementation and testing against `ais_test` only; no cutover. Original note:** The SQL below is **text only**: nothing has been executed. The owner (or someone the owner names) runs account and database creation on their own machine after approval. Agents never run it.
 
 ## 1. Accounts: least privilege, never root
 
@@ -133,6 +133,8 @@ The T-40 board text says: "The test harness refuses any database other than `ais
 4. `DB_HOST` ∈ {`127.0.0.1`, `localhost`, `::1`}.
 5. After connecting: `SELECT DATABASE()` returns `ais_test`, and `SELECT CURRENT_USER()` starts with `ais_tester@` or `ais_test_app@`.
 6. Every reset or DDL statement the harness issues names `ais_test` explicitly (fully qualified), so a wrong default database can't be hit.
+7. **Independent name check (owner safeguard S2):** a separate variable `AIS_MYSQL_TEST_TARGET` must equal `ais_test` and equal `DB_DATABASE`. Two independent settings must agree, so one mistyped value can't redirect a reset.
+8. **Re-check right before every reset (S2):** immediately before each destructive operation, on the same connection that will run it, the harness re-runs `SELECT DATABASE(), @@port, CURRENT_USER()`. It then refuses unless the database is `ais_test`, the port equals `DB_PORT`, and the account is a test account. Conditions 1–7 are also re-evaluated. A check made at connect time alone is not enough.
 
 - **Reset policy:** drop and re-create the `ais_test` tables through the runner, between test files. This is destructive, but confined to `ais_test` by grants and by the guard. **It needs a standing owner approval (OQ-5).** No test ever connects to `ais`.
 - **Offline guard tests** (no DB needed): each of conditions 1–4 violated → the guard throws before any connection is attempted.

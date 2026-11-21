@@ -49,6 +49,14 @@ The scope and approval of each task are kept in `TASK_BOARD.md`. This file recor
 - Each agent sets its own `APP_RUNTIME_PATH` outside all worktrees and outside OneDrive.
 - Only Claude runs the Apache check (phase 3).
 
+## T-60 — MariaDB foundation (Team 6)
+
+- **Owner:** CLAUDE (contracts, config, integration, docs). **Implementer:** CODEX (migrations, tooling, adapters, DB tests). **Reviewer:** AGY (fallback: fresh Codex session, with the independence caveat).
+- **Approval:** architecture conditionally APPROVED (2026-11-21, `808d825`, safeguards S1–S10). Phases 4–8 are authorized **against `ais_test` only**. No cutover, no merge, no push.
+- **Branches:** `task/T-60-database-architecture` (Claude, `AIS_SYSTEM`); `task/T-60-impl` (Codex, `..\AIS_CODEX_T60`), created from Claude's Phase-4 commit.
+- **File ownership:** plan §7. Shared with T-30: `app/bootstrap.php`, `README.md`, `ai-coordination/*`, one agent at a time.
+- **Owner prerequisite before Phase 5's online tests:** start MariaDB, apply the `my.ini` settings, and create `ais_test`, `ais_tester` and `ais_test_app` (plan §9, SECURITY §1.1).
+
 ## T-11a — Academic Records (Team 3)
 
 - **Owner:** CLAUDE. **Reviewer:** AGY (APPROVE on `0b91668` and `6ae3ac3`, pasted by the owner).

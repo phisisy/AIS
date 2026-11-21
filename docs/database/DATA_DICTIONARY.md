@@ -1,6 +1,6 @@
 # AIS data dictionary (T-60)
 
-> **Status: PROPOSED — not approved.** The DDL in §7 is **text only, proposed**. It must not be executed until the owner approves the schema (B-03), and then only through the Phase 5 migration tooling.
+> **Status: CONDITIONALLY APPROVED (owner, 2026-11-21; safeguards S1–S10 in `docs/plans/T-60-database-architecture.md` §0). Implementation and testing against `ais_test` only; no cutover. Original note:** The DDL in §7 is **text only, proposed**. It must not be executed until the owner approves the schema (B-03), and then only through the Phase 5 migration tooling.
 
 Legend for the status column:
 

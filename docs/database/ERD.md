@@ -1,6 +1,6 @@
 # AIS entity-relationship diagram (T-60)
 
-> **Status: PROPOSED — not approved.** Diagram 1 shows confirmed tables (from implemented code) and the T-30 tables (confirmed by an approved plan, not implemented: marked `CP`). Diagram 2 shows **provisional** placeholders only. They are not proposed for creation (`DATA_DICTIONARY.md` §6).
+> **Status: CONDITIONALLY APPROVED (owner, 2026-11-21; safeguards S1–S10 in `docs/plans/T-60-database-architecture.md` §0). Implementation and testing against `ais_test` only; no cutover. Original note:** Diagram 1 shows confirmed tables (from implemented code) and the T-30 tables (confirmed by an approved plan, not implemented: marked `CP`). Diagram 2 shows **provisional** placeholders only. They are not proposed for creation (`DATA_DICTIONARY.md` §6).
 
 Column details, types and constraint text are in `DATA_DICTIONARY.md`. This page shows the keys and relationships.
 
@@ -244,3 +244,11 @@ None of these is designed beyond what the API contract already names. Each one w
    - After T-30, an assignment needs an active profile that the lookup has read first.
    - The importer therefore **aborts** if any assignment or history row names a `faculty_id` that has no `faculty` row. It never drops or invents rows (OQ-8).
 5. Retained assignments of inactive faculty stay (T-21 Q4/A14). The FK is about existence, not status. Status is read live by the lookup.
+
+## Rendering validation (owner safeguard S9, 2026-11-21)
+
+- **Tool:** `@mermaid-js/mermaid-cli` 11.4.2 (`mmdc`), run by Claude in a scratch folder outside the repository.
+- **Result:** both diagrams in this file parsed and rendered without errors. Diagram 1 (`erd-1.svg`) contains all 13 related tables: `users`, `user_roles`, `audit_logs`, `programs`, `students`, `student_academic_history`, `terms`, `sections`, `section_meetings`, `section_instructors`, `section_instructor_history`, `faculty` and `faculty_history`. Diagram 2 contains the provisional `enrollments`, `grades`, `grade_history` and `courses`.
+- **Not drawn, on purpose:** `repository_locks` and `schema_migrations`, which have no relationships. They are listed above.
+- **Manual check:** relationships and cardinalities match the prose.
+- **Re-run after any edit:** `npx -p @mermaid-js/mermaid-cli@11.4.2 mmdc -i docs/database/ERD.md -o erd.svg`.

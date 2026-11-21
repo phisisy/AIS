@@ -1,6 +1,6 @@
 # T-60: Database architecture (Team 6), plan
 
-- **Status: PROPOSED — not approved.** Planning and documentation only. No schema, database, account, migration, SQL execution or application change exists or is authorized. The owner approves this plan and the owner questions (§5) before any Phase 4+ work. Every phase that touches a non-test database needs its own approval.
+- **Status: CONDITIONALLY APPROVED (owner, 2026-11-21; see §0). Original note:** Planning and documentation only. No schema, database, account, migration, SQL execution or application change exists or is authorized. The owner approves this plan and the owner questions (§5) before any Phase 4+ work. Every phase that touches a non-test database needs its own approval.
 - **Branch:** `task/T-60-database-architecture`, from `main` at `c17ee31` (184 tests green).
 - **Resolves (proposed):** B-03 for the implemented modules and T-30. That unblocks T-40 (MySQL repositories).
 - **Documents:**
@@ -13,6 +13,35 @@
   | `docs/database/CONSTRAINTS_AND_MIGRATIONS.md` | Constraint matrix, migration order, runner, rollback, verification, JSON import |
   | `docs/database/SECURITY.md` | Accounts and GRANTs, credentials, prepared statements, test guard, backups, authorization |
   | `docs/database/BLOCKERS.md` | Blocker register, per-method compatibility, Phase 7 verification plan |
+
+## 0. Owner approval (2026-11-21) — CONDITIONALLY APPROVED
+
+- **Approved:** the architecture at `808d825`, with OQ-1 to OQ-15 at their defaults, subject to the safeguards S1–S10 below.
+- **Authorized:** Phase 4, and the schema implementation and testing phases (5–8), **against `ais_test` only**.
+- **Not authorized:**
+  - migrating production data
+  - activating `APP_REPOSITORY=mysql` for the running application
+  - replacing the JSON repositories
+  - resetting any database other than `ais_test`
+  - merging into `main`
+  - pushing
+  - any application repository cutover
+- **Stop points:** stop for owner approval before a cutover and before the final merge.
+
+| # | Safeguard (binding) | Where it is enforced |
+|---|---|---|
+| S1 | `verify.php` runs **before cutover, after every import, and whenever integrity problems are suspected** (as well as after migrations and before backups, OQ-4). It is **not equivalent** to the mock's per-request JSON snapshot replay: it checks cross-row invariants on demand, not on every request. | BLOCKERS §2, CONSTRAINTS_AND_MIGRATIONS, README Database section |
+| S2 | Destructive test operations happen **only against `ais_test`**. Before **every** reset, the harness re-checks the database name and the connection target independently: env `DB_DATABASE`, a separate `AIS_MYSQL_TEST_TARGET`, and live `SELECT DATABASE()` plus `@@port` and the loopback host on the same connection. All must agree on `ais_test`. | SECURITY §6 (conditions 7–8), Phase 5 guard tests |
+| S3 | Strict `sql_mode` and UTC on **every** application, migration and test connection. | `Database::SESSION_INIT` via `PDO::MYSQL_ATTR_INIT_COMMAND` (Phase 4, done); Phase 5 asserts `@@SESSION.sql_mode` and `@@SESSION.time_zone` on a real connection |
+| S4 | C-03 stays **unresolved** until T-22 defines enrollment eligibility and student-status semantics. Existing API behaviour doesn't change without approval. | API_CONTRACTS note (no behaviour change) |
+| S5 | Faculty tables (V0005/V0006) are tested in `ais_test` now and **applied to no other database until T-30 is merged**. | Migration runner target rule, handoff |
+| S6 | **No import of instructor assignments that reference missing faculty profiles** (abort, OQ-8). | `import_json.php` (Phase 8), V10 tests |
+| S7 | MariaDB 10.4.32 is **development-only**. Production must use a supported MariaDB release, with Phase 7 re-run on it. | README, BLOCKERS |
+| S8 | Real-MariaDB tests prove CHECK-constraint REGEXP behaviour, binary-collation comparisons, generated-column uniqueness, and history sequencing (gap-free, concurrent). | Phase 5/7 MySQL tests |
+| S9 | The Mermaid ERD is rendered and validated. | Phase 4 (Claude), recorded in ERD.md |
+| S10 | The approved repository interfaces and module ownership boundaries are preserved. | §4.1, §7; review checklist |
+
+- **T-30** may proceed in parallel in its own worktree. Shared files (`app/bootstrap.php`, `README.md`, `ai-coordination/*`) are edited by one agent at a time, and whichever task comes second rebases.
 
 ## 1. Goal and acceptance criteria
 

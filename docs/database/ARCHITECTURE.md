@@ -1,6 +1,6 @@
 # AIS database architecture (T-60)
 
-> **Status: PROPOSED — not approved.** This is planning text only. Nothing here has been executed, and no schema, database, account or migration exists. The owner approves before any schema is created or any migration is run (B-03).
+> **Status: CONDITIONALLY APPROVED (owner, 2026-11-21; safeguards S1–S10 in `docs/plans/T-60-database-architecture.md` §0). Implementation and testing against `ais_test` only; no cutover. Original note:** This is planning text only. Nothing here has been executed, and no schema, database, account or migration exists. The owner approves before any schema is created or any migration is run (B-03).
 
 - **Target engine:** MariaDB **10.4.32** (XAMPP, local development), InnoDB. Production engine and version: owner question OQ-12 in `docs/plans/T-60-database-architecture.md`.
 - **Companion documents:** `ERD.md`, `DATA_DICTIONARY.md`, `CONSTRAINTS_AND_MIGRATIONS.md`, `SECURITY.md`, `BLOCKERS.md` (all in `docs/database/`). The plan is `docs/plans/T-60-database-architecture.md`.

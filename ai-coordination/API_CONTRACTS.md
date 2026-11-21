@@ -49,6 +49,11 @@ Roles: student | faculty | registrar | admin
 | GET | /api/students/me/academic-record | 🔒 | student | — | Own record; 404 if no profile |
 | GET | /api/programs | 🔒 | any | — | Read-only program catalog `{code, name, max_year_level}` |
 
+> **C-03 (T-60, 2026-11-21) — UNRESOLVED, no behaviour change.**
+> - The implemented Student model (`app/Students/Models/Student.php`, `API_CONTRACT_T10_STUDENTS.md`) uses `academic_status` ∈ {active, inactive, graduated, transferred, on_leave}, a year level up to the program maximum, and no `email`. The shape below is the earlier sketch.
+> - The database follows the implemented model.
+> - Enrollment rule 1 ("regular/irregular") stays open **until T-22 defines enrollment eligibility and student-status semantics** (owner safeguard S4).
+
 Student (API shape): `{ id, student_number, user_id, first_name, last_name, middle_name?, email?, program_code, year_level (1–6), academic_status: "regular"|"irregular"|"on_leave"|"graduated"|"withdrawn", admission_year }`
 Academic record (T-11a, implemented; supersedes the earlier sketch): `{ student{id, student_number, full_name, program_code, program_name, year_level, academic_status, admission_year}, history{entries[{seq, at, field, from, to, actor_id (staff only)}], pagination{page, per_page, total}}, enrollment_summary, grades_summary }`. History is paginated (`?page=`, `?per_page=` ≤ 100) and has no cap (owner decision D4). The summaries are `{available:false}` until Teams 4 and 5 provide sources. No grades or enrollment copies.
 

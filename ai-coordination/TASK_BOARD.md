@@ -27,7 +27,8 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-31 | 5 | Class rosters | T-22, T-30 | PROPOSED |
 | T-32 | 5 | Grade entry, submission, finalization | T-31, B-05 | PROPOSED |
 | T-39 | All | Cross-module integration tests | T-32 | PROPOSED |
-| T-40 | 2–5 | MySQL repositories | B-03 | BLOCKED |
+| T-40 | 2–5 | MySQL repositories | B-03 → T-60 | Folded into T-60 Phases 6–7 (file list amended, OQ-14) |
+| T-60 | 6 | MariaDB foundation: schema, migrations, tools, MySQL adapters (ais_test only) | T-21 ✔ | IN_PROGRESS (architecture conditionally APPROVED 2026-11-21, `808d825`; Phase 4 by Claude; no cutover, no merge) |
 
 Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. They do overlap on
 `app/bootstrap.php`, so bootstrap/route registration edits must happen one task at a time.
@@ -253,4 +254,4 @@ Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. T
 - **Dependencies:** B-03 (Team 6 schema approval)
 - **Acceptance criteria:** The same contract tests pass for mock and MySQL. Prepared statements only. Transactions with row locks for last-admin, capacity and grade submission. The test harness refuses any database other than `ais_test`. No schema DDL in application code.
 - **Required tests:** shared repository contract tests run against both implementations.
-- **Status:** BLOCKED (B-03)
+- **Status:** Superseded by T-60 Phases 6–7 (owner, 2026-11-21). The file list is amended per `docs/plans/T-60-database-architecture.md` §7. B-03 is resolved by the T-60 design. No cutover without separate approval.

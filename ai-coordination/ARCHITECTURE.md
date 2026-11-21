@@ -77,6 +77,13 @@ service graph acyclic. ⚠ (B-04). Superseded by §4.1.
 - **Authorization is server-side:** guard plus service, registrar and admin only. Every successful change appends one audit entry in the same store transaction (`assignment_history`). There are no Team 6 schema changes.
 - **Implementation:** T-21, expanded. T-30 implements the lookup and consumes the directory. Details are in `docs/plans/T-20-terms-sections.md` §9.
 
+## 4.2 Persistence (T-60, conditionally approved 2026-11-21)
+
+- MariaDB adapters implement the **existing repository interfaces unchanged**, are chosen per module (`APP_REPOSITORY_<MODULE>`), and never fall back to mock.
+- One lock row per former JSON store keeps the current single-lock atomicity.
+- Modules don't read other modules' tables; cross-module reads go through interfaces, as today.
+- Details: `docs/plans/T-60-database-architecture.md` and `docs/database/`.
+
 ## 5. Core conventions
 
 - **Responses:** `{"success":true,"message":"...","data":{...}}` or `{"success":false,"message":"...","errors":{...}}`. `Content-Type: application/json`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`.

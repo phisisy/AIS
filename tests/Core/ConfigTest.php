@@ -65,6 +65,54 @@ test('Repository selection defaults to mock and fails closed for unknown values'
     }
 });
 
+test('Per-module repository overrides inherit the default, fail closed, and keep auth first (T-60)', function (): void {
+    $names = ['APP_REPOSITORY', 'APP_REPOSITORY_AUTH', 'APP_REPOSITORY_STUDENTS', 'APP_REPOSITORY_ENROLLMENT', 'APP_REPOSITORY_FACULTY'];
+    $previous = array_combine($names, array_map('getenv', $names));
+    $load = static fn (): array => require dirname(__DIR__, 2) . '/config/app.php';
+    $reset = static function () use ($names): void { foreach ($names as $name) { putenv($name); } };
+    try {
+        $reset();
+        same(['auth' => 'mock', 'students' => 'mock', 'enrollment' => 'mock', 'faculty' => 'mock'], $load()['repositories']);
+        putenv('APP_REPOSITORY=mysql');
+        same(['auth' => 'mysql', 'students' => 'mysql', 'enrollment' => 'mysql', 'faculty' => 'mysql'], $load()['repositories']);
+        putenv('APP_REPOSITORY_STUDENTS=mock');
+        same(['auth' => 'mysql', 'students' => 'mock', 'enrollment' => 'mysql', 'faculty' => 'mysql'], $load()['repositories']);
+        $reset();
+        putenv('APP_REPOSITORY_AUTH=mysql');
+        same(['auth' => 'mysql', 'students' => 'mock', 'enrollment' => 'mock', 'faculty' => 'mock'], $load()['repositories']);
+        same('mock', $load()['repository']);
+        // A module on MySQL while auth stays on mock, or any unknown override value, fails closed.
+        foreach ([['APP_REPOSITORY_STUDENTS', 'mysql'], ['APP_REPOSITORY_ENROLLMENT', 'mysql'], ['APP_REPOSITORY_FACULTY', 'mysql'],
+                  ['APP_REPOSITORY_AUTH', ''], ['APP_REPOSITORY_FACULTY', 'MYSQL'], ['APP_REPOSITORY_ENROLLMENT', 'sqlite']] as [$name, $value]) {
+            $reset();
+            putenv($name . '=' . $value);
+            same('Invalid repository configuration.', throws(RuntimeException::class, $load)->getMessage());
+        }
+        $reset();
+        putenv('APP_REPOSITORY=mysql');
+        putenv('APP_REPOSITORY_AUTH=mock');
+        same('Invalid repository configuration.', throws(RuntimeException::class, $load)->getMessage());
+    } finally {
+        foreach ($previous as $name => $value) { putenv($value === false ? $name : $name . '=' . $value); }
+    }
+});
+
+test('Any module on MySQL keeps the application failing closed until T-60 wiring exists', function (): void {
+    $directory = tempDirectory();
+    $previous = [getenv('APP_REPOSITORY_AUTH'), getenv('APP_RUNTIME_PATH')];
+    try {
+        putenv('APP_REPOSITORY_AUTH=mysql');
+        putenv('APP_RUNTIME_PATH=' . $directory);
+        $error = throws(RuntimeException::class, static function (): void { require dirname(__DIR__, 2) . '/app/bootstrap.php'; });
+        same('MySQL repositories are not available yet.', $error->getMessage());
+        same([], array_values(array_diff(scandir($directory), ['.', '..'])));
+    } finally {
+        putenv($previous[0] === false ? 'APP_REPOSITORY_AUTH' : 'APP_REPOSITORY_AUTH=' . $previous[0]);
+        putenv($previous[1] === false ? 'APP_RUNTIME_PATH' : 'APP_RUNTIME_PATH=' . $previous[1]);
+        removeTestDirectory($directory);
+    }
+});
+
 test('PDO factory rejects unsafe DSN settings without connecting or leaking secrets', function (): void {
     $base = ['host' => '127.0.0.1', 'port' => '3306', 'database' => 'ais_test',
         'username' => 'test', 'password' => 'do-not-expose'];

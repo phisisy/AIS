@@ -382,6 +382,14 @@ Development seeding belongs to phase 2b: the planned command is
 `php database/seeders/dev_sections.php` (not supplied by this backend phase).
 It will create fictional terms and sections only in an empty mock catalog.
 
+## Database (Team 6, T-60) — in development, not active
+
+- **Design:** MariaDB/InnoDB, `utf8mb4_nopad_bin`, strict `sql_mode` and UTC on every connection. See `docs/plans/T-60-database-architecture.md` and `docs/database/`. Conditionally approved 2026-11-21.
+- **The application still uses the JSON repositories.** `APP_REPOSITORY` and `APP_REPOSITORY_AUTH|STUDENTS|ENROLLMENT|FACULTY` accept `mock|mysql`. A module on `mysql` needs auth on `mysql`. Any `mysql` setting still makes the app **fail closed** at startup until the MySQL wiring exists, and production cutover needs separate approval.
+- **Test database:** only `ais_test` is used, by tests and CLI tools only, never by the running app. The owner sets up local MariaDB and the accounts (`docs/plans/T-60-database-architecture.md` §9, `docs/database/SECURITY.md` §1, §8).
+- **MariaDB version:** XAMPP's 10.4.32 is for development only. Production needs a supported release.
+- **`verify.php`** (Phase 8) checks cross-row integrity on demand. It runs before cutover, after imports and migrations, before backups, and whenever integrity is in doubt. It is not the same as the JSON mocks' check on every request.
+
 ## Core interfaces
 
 - `app/bootstrap.php` returns an explicit array container with `config`,

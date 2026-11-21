@@ -46,7 +46,7 @@ $container = [
 $container['router']->add('GET', '/', static fn (): Response => Response::success([], 'AIS API is running.'));
 
 // Team 2 — Auth (T-01). MySQL repositories arrive with T-40; until then mysql mode fails closed.
-if ($container['config']['repository'] !== 'mock') {
+if (in_array('mysql', $container['config']['repositories'], true)) {
     throw new RuntimeException('MySQL repositories are not available yet.');
 }
 $runtime = RuntimeDirectory::prepare($container['config']['runtime_path'], dirname(__DIR__) . '/public');

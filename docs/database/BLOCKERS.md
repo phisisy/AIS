@@ -1,6 +1,6 @@
 # Database blockers, compatibility and verification (T-60)
 
-> **Status: PROPOSED — not approved.** This register supplements `ai-coordination/INTEGRATION_BLOCKERS.md`. It changes no blocker status. Only the owner does that, and Claude records it in Phase 4.
+> **Status: CONDITIONALLY APPROVED (owner, 2026-11-21; safeguards S1–S10 in `docs/plans/T-60-database-architecture.md` §0). Implementation and testing against `ais_test` only; no cutover. Original note:** This register supplements `ai-coordination/INTEGRATION_BLOCKERS.md`. It changes no blocker status. Only the owner does that, and Claude records it in Phase 4.
 
 ## 1. Blocker register (database view)
 
@@ -117,3 +117,14 @@ All MySQL tests are files ending `MySQLTest.php`. They register tests only when 
 | DB-M7 | Grant UPDATE on a history table | V6 |
 | DB-M8 | Importer skips the orphan pre-check | V10 |
 | DB-M9 | Order `assignedFacultyIds` by `faculty_id` | V7 assignment order |
+
+## Owner safeguard S1 — `verify.php` is not per-request validation
+
+`verify.php` checks the cross-row invariants: history replay, gap-free `seq`, meeting overlap, instructor conflicts, the cap and `assigned_seq` links. It runs **on demand**:
+- before any cutover
+- after every import and every migration
+- before every backup
+- whenever integrity problems are suspected
+- in Phase 7 tests
+
+It is **not equivalent** to the JSON mock's per-request snapshot replay. Between runs, a corrupt row that a request doesn't read won't make that request fail. Per-row model validation, the DB constraints and the append-only grants narrow, but don't close, that gap (OQ-4, accepted).

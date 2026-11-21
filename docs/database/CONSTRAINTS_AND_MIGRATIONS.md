@@ -1,6 +1,6 @@
 # Constraints, migrations and data migration (T-60)
 
-> **Status: PROPOSED — not approved.** No migration exists, and none may be written to a non-test database or run until the owner approves the schema (B-03). Phase 5 builds the tooling. Applying anything to a database other than `ais_test` needs a separate owner approval each time.
+> **Status: CONDITIONALLY APPROVED (owner, 2026-11-21; safeguards S1–S10 in `docs/plans/T-60-database-architecture.md` §0). Implementation and testing against `ais_test` only; no cutover. Original note:** No migration exists, and none may be written to a non-test database or run until the owner approves the schema (B-03). Phase 5 builds the tooling. Applying anything to a database other than `ais_test` needs a separate owner approval each time.
 
 ## 1. Relationship and constraint matrix
 
