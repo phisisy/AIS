@@ -311,7 +311,8 @@ CREATE TABLE users (
   auth_version  INT UNSIGNED NOT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_users_email (email),
-  CONSTRAINT ck_users_id CHECK (id >= 1),
+  -- (removed 2026-11-21: MariaDB 10.4 rejects CHECK on an AUTO_INCREMENT column, error 1901;
+  --  id >= 1 is guaranteed by INT UNSIGNED AUTO_INCREMENT)
   CONSTRAINT ck_users_email CHECK (email = LOWER(email) AND CHAR_LENGTH(email) BETWEEN 3 AND 254),
   CONSTRAINT ck_users_status CHECK (status IN ('active','inactive')),
   CONSTRAINT ck_users_password_hash CHECK (CHAR_LENGTH(password_hash) >= 20),
