@@ -76,6 +76,8 @@ function studentRepositoryContract(string $backend, callable $factory): void
         same(4, $repo->search([], 9, 2)['total']);
         same([], $repo->search([], 9, 2)['students']);
         same([2], array_map(static fn ($s): int => $s->id(), $repo->search(['search' => '%_!'], 1, 10)['students']));
+        same([2], array_map(static fn ($s): int => $s->id(), $repo->search(['search' => '%'], 1, 10)['students']));
+        same([2], array_map(static fn ($s): int => $s->id(), $repo->search(['search' => '_'], 1, 10)['students']));
         same(1, $repo->search(['search' => '  admin  '], 1, 10)['total']);
         same(1, $repo->search(['search' => '2024/002'], 1, 10)['total']);
         same(1, $repo->search(['search' => 'CASE'], 1, 10)['total']);

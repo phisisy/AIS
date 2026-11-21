@@ -54,6 +54,29 @@ final class MySQLTestSupport
         return $pdo;
     }
 
+    public static function connectApp(): PDO
+    {
+        self::assertEnvironment();
+        $password = getenv('AIS_MYSQL_TEST_APP_PASSWORD');
+        if (!is_string($password)) {
+            throw new RuntimeException('AIS_MYSQL_TEST_APP_PASSWORD is required for MySQL contract tests.');
+        }
+        $pdo = Database::connect([
+            'host' => getenv('DB_HOST'),
+            'port' => getenv('DB_PORT'),
+            'database' => getenv('DB_DATABASE'),
+            'username' => 'ais_test_app',
+            'password' => $password,
+        ]);
+        self::assertConnection($pdo);
+        $statement = $pdo->prepare('SELECT CURRENT_USER()');
+        $statement->execute();
+        if (!str_starts_with((string) $statement->fetchColumn(), 'ais_test_app@')) {
+            throw new RuntimeException('Unsafe MySQL app test connection.');
+        }
+        return $pdo;
+    }
+
     public static function assertConnection(PDO $pdo): void
     {
         self::assertEnvironment();
