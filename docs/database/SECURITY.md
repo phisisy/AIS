@@ -118,7 +118,7 @@ That partly replaces the mock's "replay on every read" protection (`BLOCKERS.md`
 ## 5. Error handling that leaks nothing
 
 - **Connection failures:** `Database::connect` already turns them into `RuntimeException('Database connection failed.')` and drops the original exception (credentials).
-- **Query failures:** adapters let `PDOException` propagate unchanged (no message re-wrapping that could add values). `ErrorHandler` logs **the class name only** and returns the generic 500 (`ErrorHandler.php:31-34`). SQL text, values and SQLSTATE details never reach a response or the log.
+- **Query failures:** adapters catch `PDOException` and throw a generic `RuntimeException('<Module> repository unavailable.')`, **without chaining the original**, so no SQL, values or SQLSTATE can reach a response or the log. `ErrorHandler` logs the exception class only and returns the generic 500 (`ErrorHandler.php:31-34`). Fixed `HttpException` messages (404/409/422) pass through unchanged. *Trade-off (review L1):* the log can't tell a database outage from corrupt data. A future safe diagnostic, such as a SQLSTATE-only log line, needs owner approval.
 - **No `error_log` calls containing SQL, parameters or row data** in adapters or tools.
 - **CLI tools** print version names, table names, counts and offending **ids** only, and exit non-zero on failure.
 - **A database outage** means generic 500s on DB-backed routes. Login throttling and security-event logging keep working, because they are file-based. The app never falls back to mock (ARCHITECTURE.md §5).

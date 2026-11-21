@@ -126,7 +126,7 @@ Why one row lock rather than fine-grained row locks:
 **Reads** don't take the lock:
 
 - InnoDB consistent reads see the last committed state, which is what a `JsonStore::read()` shared lock gives today.
-- A read that needs more than one statement (a section plus its meetings, a page plus its total) runs inside `START TRANSACTION READ ONLY` (REPEATABLE READ snapshot), so it is a consistent snapshot.
+- A read that needs more than one statement (a section plus its meetings, a page plus its total) runs inside one transaction (`PDO::beginTransaction()`, read-write mode but read-only in practice), giving a single REPEATABLE READ snapshot. *(Review L2: earlier text said `START TRANSACTION READ ONLY`; consistency is identical. Only the server-side refusal of an accidental write is not used.)*
 
 **Isolation:** REPEATABLE READ (the InnoDB default). Every decision read inside a write transaction happens after the lock row is taken, so it sees the latest committed data, because no other writer of that store can be running.
 
@@ -146,6 +146,12 @@ Why one row lock rather than fine-grained row locks:
 - **No cross-store write transactions exist today,** and none are added. For example, Students checks the account through `UserRepositoryInterface` **before** its own lock (`StudentService.php:114`), which is the same window the mock has.
 - **Deadlock or lock-wait timeout** (errors 1213 and 1205): there is no retry. The exception propagates, and the user gets the generic 500 (`ErrorHandler.php:34`). With one lock row per store and no cross-store writes, deadlocks shouldn't occur at all. Phase 7 concurrency tests assert that none happen.
 - **Unique-key violation** (error 1062) inside a locked transaction means an invariant was skipped (a bug). It surfaces as the generic 500, never as a 409, so a skipped in-lock check can't hide behind the DB constraint.
+
+### 6.3 Transaction rules found in review (6a/6b review L4, L5; 2026-11-21)
+
+- **Never catch `PDOException` or `Throwable` inside a repository transaction callback** (a service callback or a `$check` closure). After a deadlock (1213) or a lock-wait timeout, InnoDB has already rolled back the whole transaction. Carrying on would run later statements outside the transaction and without the lock row. Let the exception reach the repository, which rolls back and rethrows a sanitized error. Phase 9 review checks this rule.
+- **One shared PDO per request is required for correctness, not just efficiency.** Adapters refuse nested transactions on a shared connection. With separate connections, nesting a students write inside an auth callback would wait on its own `users` row lock until `innodb_lock_wait_timeout`, and InnoDB can't detect that.
+- **Lock order** for any future operation that writes to more than one store: **auth → students → enrollment → faculty**, each lock row taken at most once, on the one shared PDO. No current operation does this.
 
 ## 7. Gap-free `seq` in SQL
 
