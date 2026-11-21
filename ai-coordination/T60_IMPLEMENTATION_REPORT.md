@@ -22,6 +22,10 @@
 - Online tests exist for live guard and session settings; migration order, no-op rerun, and checksum tampering; REGEXP CHECK and `\\z` escaping, binary equality and escaped `LOWER() LIKE`, generated-column uniqueness, duplicates, FK and RESTRICT failures, and gap-free history sequence with competing `repository_locks` transactions; app-account privileges.
 - Online tests: **NOT RUN**. `AIS_MYSQL_TESTS` and all required `DB_*` environment variables were unset. No MariaDB connection, reset, grant, or migration was executed. The privilege test also requires `AIS_MYSQL_TEST_APP_PASSWORD` after the test app account and grants are installed.
 
+## Online verification fix
+
+- A MariaDB 10.4.32 run reported error 1901 for `ck_users_id` on `users.id` (`AUTO_INCREMENT`). V0002 now omits that CHECK; the reported rerun applied V0001–V0006 cleanly. `ck_audit_logs_id` remains because `audit_logs.id` is not `AUTO_INCREMENT`.
+
 ## Deviations and remaining risks
 
 - The CLI is confined to `ais_test` for this approved phase. Broader target support requires a later approved change, including the required non-test backup gate.
