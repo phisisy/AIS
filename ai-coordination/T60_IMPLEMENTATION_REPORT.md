@@ -32,3 +32,48 @@
 - The grant file is a substitution template, not an executed grant. An authorized operator must substitute the two documented test identifiers and apply it after migrations before the privilege test can run.
 - MariaDB behavior, DDL compatibility, grant errors, and online assertions remain unverified until the owner supplies the guarded `ais_test` setup. `verify.php` is scheduled for Phase 8, so the Phase 5 runner cannot yet perform the post-migration cross-row verification required before future cutover.
 - No commit, merge, push, production database, or app repository cutover was performed.
+
+---
+
+# T-60 Phase 6a implementation report (2026-11-21)
+
+Baseline: `task/T-60-impl` at `b71884e`. No Git writes, app wiring, database connection, reset, or migration execution were performed.
+
+## Files
+
+- `app/Auth/Repositories/MySQLUserRepository.php`: injected-PDO adapter for lookups, search, audit reads and serialized transactions.
+- `app/Auth/Repositories/MySQLUserTransaction.php`: locked transaction operations for insert, update and audit append.
+- `tests/Auth/UserRepositoryContract.php`: seven shared contract cases covering every method on the three interfaces.
+- `tests/Auth/UserRepositoryContractTest.php`: always-on mock fixture.
+- `tests/Auth/UserRepositoryContractMySQLTest.php`: opt-in guarded `ais_test` fixture, reset and migrations before each case.
+- This report (append only).
+
+## Mock-to-MySQL behavior mapping
+
+| Mock behavior | MySQL behavior |
+|---|---|
+| `findById`, `findByEmail` return a validated `User` or `null`; email is trimmed/lowercased | Prepared selects, roles ordered by role, `User::fromArray` for each returned row; missing returns `null` |
+| `search` uses case-insensitive email substring, id order, total and page slice | Lowercased escaped `LIKE` pattern, `COUNT(*)` and ordered page in one read snapshot; each user hydrated and validated |
+| One exclusive `JsonStore` write transaction | One PDO transaction with `repository_locks('auth') FOR UPDATE`; callback result returned; exceptions roll back |
+| Active-admin count before and after; last removal 409 | Same count under auth lock; same `LAST_ADMIN_MESSAGE` and rollback |
+| `tx->find` and `findByEmail` see pending writes | Reads on the same PDO connection see pending writes |
+| `insert` normalizes email, checks duplicate 409, validates user | Same in-lock check and `User::fromArray`; user id from AUTO_INCREMENT; roles inserted in same transaction |
+| `update` enforces allowlist and 404, duplicate 409, role replacement and `auth_version` bumps | Same checks and messages; validates original and merged rows; replaces roles in the same transaction |
+| `appendAudit` allowlist and recursive secret-key check; sequential id | Same validation and entry shape; id allocated from locked `last_seq` and rolled back with the audit row |
+| `auditEntries` returns oldest first with stable keys | `ORDER BY id`, decoded `changes`, exact PHP key order and UTC `at` formatting |
+
+PDO failures become `RuntimeException('User repository unavailable.')` without SQL or driver text. Expected validation, last-admin, missing-user, and callback exceptions retain their types and messages. The repository takes only an injected PDO; it does not connect, read environment variables, or issue DDL.
+
+## Deviations and limits
+
+- `users.id` is AUTO_INCREMENT, so a rolled-back insert can leave an id gap; the documented interface has no gap-free entity-id promise. Audit ids remain gap-free.
+- `user_roles` has no order column. SQL reads roles in byte-sorted order, matching `UserService` writes; a direct transaction call supplying unsorted roles would retain that order in the mock but return sorted roles from MySQL.
+- `audit_logs.at` is DATETIME. The adapter accepts the service's UTC-seconds format and reconstructs it on read; arbitrary timestamp strings accepted by the mock cannot be preserved. The schema also requires an existing actor id through its FK, unlike the mock's in-memory audit list.
+- MariaDB behavior, including constraints, search escaping, transaction isolation and error mapping, is unverified in this sandbox. Phase 7.2 owns the concurrency test.
+
+## Verification
+
+- `APP_RUNTIME_PATH` pointed to `%TEMP%\ais-codex-t60-phase6a-runtime`, outside OneDrive; `AIS_MYSQL_TESTS=0`.
+- `php tests/run.php`: **198 passed, 0 failed, 198 total** (191 baseline plus seven new offline contract cases).
+- `php -l` across **129 PHP files**: **0 failures**.
+- Online contract: **NOT RUN**. When the guarded `ais_test` environment is enabled, the same seven cases reset and migrate before each run, then exercise lookup, search, writes, last-admin protection, audit shape/sequence and rollback through MySQL.
