@@ -4,6 +4,84 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
+## T-60 Phase 8 → CODEX: `verify.php` + `import_json.php` (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
+
+**Authorization:** owner, 2026-11-21. **Tooling only**, against `ais_test` only.
+- Not authorized: wiring/bootstrap, `APP_REPOSITORY=mysql`, `ais` or any production database, importing the live runtime, cutover, a faculty repository, T-22, merge, push.
+- **No change to any existing `app/` file.** If a repository defect shows up, stop and report it.
+- Branch and worktree: `task/T-60-impl` in `..\AIS_CODEX_T60`, fast-forwarded to this commit. No git writes by Codex.
+
+### Task A — plan (Claude; approved design: `CONSTRAINTS_AND_MIGRATIONS.md` §4–§5, `BLOCKERS.md`, `SECURITY.md` §6)
+
+- **Supported modules, in this order:** `auth`, then `students`, then `enrollment`.
+  - `auth`: `users`, `user_roles`, `audit_logs`, plus the `auth` lock row.
+  - `students`: `programs` (from `programs.json`), `students`, `student_academic_history`.
+  - `enrollment`: `terms`, `sections`, `section_meetings`, `section_instructors`, `section_instructor_history`.
+- **Deferred:**
+  - `faculty`: no JSON faculty store exists before T-30. `--module=faculty` → exit 2 "deferred until T-30".
+  - T-22 enrollments and grades: no tables.
+  - Rate limiters, security events and sessions stay file-based.
+- **Preconditions** (refuse with exit 2):
+  - schema fully `applied`;
+  - the module's target tables empty and its lock `last_seq = 0`;
+  - dependencies imported (students and enrollment need users; enrollment assignments need faculty rows);
+  - the target is `ais_test` only (as `migrate.php`), checked against `DB_DATABASE` and the live `SELECT DATABASE()`, `@@port` and `CURRENT_USER()`;
+  - CLI only;
+  - the migration account (`DB_MIGRATION_*`; in `ais_test` that's `ais_tester`), never root.
+  - "App stopped" can't be checked automatically, so it's printed as a reminder, not enforced.
+- **Single-use, not idempotent:** a second import into non-empty tables is refused (exit 2). It never merges, overwrites or deletes.
+- **Steps per module:**
+  1. Validate the whole source with the existing mock (full-snapshot validation). Any corruption → exit 1, nothing written.
+  2. Read the raw JSON via `JsonStore::read()`.
+  3. `BEGIN`, lock the row, then INSERT with the original ids and seqs. Roles are inserted sorted, and roles are **compared as sets** wherever JSON and MySQL are compared.
+  4. Set `last_seq` to the imported stream maximum. **I1: the auth counter = `MAX(audit_logs.id)`.**
+  5. Verify inside the transaction: row counts; interface equality, mock vs MySQL adapter on the same connection (§5.3 step 5; roles compared as sets); and the module's verifier checks.
+  6. `COMMIT` only if everything passes, otherwise `ROLLBACK`. `--dry-run` always rolls back.
+  - **Orphan `faculty_id` → abort** (OQ-8).
+  - No silent dropping, no fabricated relationships, no auto-repair, no conflict resolution.
+- **Output:** counts and check names only. Offending **ids** only; never emails, names, hashes or values.
+- **Exit codes:** 0 ok or clean dry run, 1 aborted and rolled back, 2 refused.
+- **`verify.php --target=ais_test`:**
+  - Read-only, `SELECT` only. It wraps the reads in one REPEATABLE READ snapshot and runs no write statement.
+  - All the checks in `CONSTRAINTS_AND_MIGRATIONS.md` §4: per-student history replay and last `to_value` = current column; assignment history 1..n, replay = `section_instructors`, `assigned_seq` the latest; ≤ 5 per section and no same-term overlap per instructor; scheduled sections have ≥ 1 meeting and no self-overlap; audit ids 1..n; `last_seq` = stream max for every lock row; every user has ≥ 1 role; `year_level` ≤ program max; at most one current term; every row passes its PHP model. Faculty-history checks only if rows exist.
+  - Foreign keys and duplicates are enforced by constraints; an orphan and duplicate scan is optional.
+  - Output: check name, PASS or FAIL, offending ids only. Exit 0 clean, 1 violations, 2 error (sanitized).
+  - It must work with `SELECT` only, so it can run as `ais_test_app`.
+
+### Files you may create (plan §7 row 8), and nothing else
+- `database/verify.php` and `database/import_json.php` (thin CLIs)
+- `database/tools/IntegrityVerifier.php` and `database/tools/JsonImporter.php` (logic; required like `MigrationRunner.php`)
+- `tests/Database/VerifyMySQLTest.php` and `tests/Database/ImportMySQLTest.php` (online, guarded)
+- `tests/Database/ImportOfflineTest.php` (argument parsing and refusals that need no DB)
+- the report append
+
+### Test matrix (owner Task E; all online tests on `ais_test`, guarded, with a guarded reset before each)
+
+**Source:** each test builds a **disposable JSON runtime in a temp dir**, using the existing mock repositories and services (or the dev seeders run with `APP_RUNTIME_PATH` set to the temp dir). Never `C:/ais-runtime` or any configured runtime. The temp dir is deleted afterwards.
+
+| # | Case | Expected |
+|---|---|---|
+| E1 | Valid import of all 3 modules (users with multiple roles and an audit trail; students with history; terms, sections with meetings of every `delivery_mode`, assignments with history, faculty rows pre-seeded by the tester) | exit 0; counts equal; verifier clean |
+| E2 | IDs preserved: users, students, terms, sections, the faculty_ids in assignments; the next AUTO_INCREMENT insert gets MAX+1 | equal ids |
+| E3 | History and audit preserved, with their order (seq, `at`, actor, `from`/`to`) | equal |
+| E4 | Duplicate ids or business keys in the source, or a target not empty | exit 1 (source) or 2 (target); nothing written |
+| E5 | Missing foreign key: a student `user_id` with no user; an assignment `faculty_id` with no faculty row | exit 1; full rollback |
+| E6 | Invalid data: a bad email, a bad timestamp, an unknown role, a malformed meeting | exit 1; nothing written |
+| E7 | A failure injected after some INSERTs | **full rollback**: all the module's tables empty, `last_seq` 0 |
+| E8 | Repeat import | exit 2, refused; data unchanged |
+| E9 | I1: the auth `last_seq` = `MAX(audit_logs.id)` after import; a new audited write through `MySQLUserRepository` gets id MAX+1 | ok |
+| E10 | Counts per table equal the JSON counts | ok |
+| E11 | Semantic equivalence: mock vs MySQL interface outputs equal, roles as sets | ok |
+| E12 | Safety: refuses `--target` ≠ `ais_test`, a mismatched `DB_DATABASE` or live database, or a non-loopback host; never resets; never writes the source runtime (byte-identical before and after); `--dry-run` writes nothing | ok |
+| V1 | `verify.php` on a clean imported DB | exit 0, all PASS |
+| V2 | Corruption injected by the tester, one per check: history gap; history/current mismatch; assignment replay mismatch; `assigned_seq` wrong; 6th instructor; same-term overlap; scheduled with no meeting; audit id gap; `last_seq` drift; user without a role; `year_level` > program max; two current terms; an invalid model row | exit 1; the failing check named; ids only |
+| V3 | `verify.php` writes nothing (checksum of every table before and after) and runs as `ais_test_app` | ok |
+| V4 | Database error, for example a wrong password | exit 2; sanitized message |
+
+Codex can't reach MariaDB: write the online tests, run the offline suite (211+) and `php -l`, and report the online tests as NOT RUN. Claude runs everything online.
+
+---
+
 ## T-60 Phase 7.2 → CODEX: MariaDB concurrency and transaction-integrity tests (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
 
 - **Authorization:** owner, 2026-11-21. **Tests only.**
