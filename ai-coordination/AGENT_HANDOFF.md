@@ -4,6 +4,68 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
+## T-60 review fixes (A) + Phase 6c (B) → CODEX (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
+
+- **Authorization:** owner, 2026-11-21.
+  - Independent review of 6a/6b: **APPROVE** (`ai-coordination/T60_6AB_REVIEW_REPORT.md`).
+  - 6c is authorized for the existing T-20/T-21 catalog: terms, sections, meetings, instructor assignments, assignment history.
+  - **Not authorized:** T-22 enrollment requests, grades, any T-22 schema, a faculty repository (waits for T-30), wiring/bootstrap, `APP_REPOSITORY=mysql`, `ais` or import, merge, push.
+- **Branch and worktree:** `task/T-60-impl` in `..\AIS_CODEX_T60`, fast-forwarded to this commit. No git writes by Codex. Report parts A and B **separately**.
+
+### Part A: review fixes for 6a/6b (tests only; no adapter behaviour change unless a test proves a bug)
+
+Files: `tests/Database/MySQLTestSupport.php`, `tests/Auth/UserRepositoryContract*.php` and `tests/Students/StudentRepositoryContract*.php` (existing), plus the report append.
+
+- **M1:**
+  - Add a guarded helper `MySQLTestSupport::connectApp(): PDO`: user `ais_test_app`, password from env `AIS_MYSQL_TEST_APP_PASSWORD`, same host, port and database. It runs `assertConnection` and requires `CURRENT_USER()` to start with `ais_test_app@`.
+  - In both MySQL contract factories, keep the owner (`ais_tester`) connection for reset, migrations and fixtures, but **build the repository under test on the app connection**.
+  - If `AIS_MYSQL_TEST_APP_PASSWORD` is unset, the MySQL contract tests must fail loudly rather than fall back to the owner account.
+- **M2:** add searches for `'%'` alone and `'_'` alone, each expecting exactly the one fixture row whose value literally contains that character. Make sure the fixtures have such rows and other rows without them, so an unescaped implementation would fail.
+- **L3, MySQL-only cases** (fault injection through the owner connection):
+  - (a) A `PDOException` inside `MySQLUserRepository::transaction()`, for example a callback that inserts a duplicate primary key through `appendAudit` after moving `last_seq`, comes out as a sanitized `RuntimeException`, with nothing written and `last_seq` unmoved.
+  - (b) A student write where the `students` row succeeds and then the history insert fails: everything is rolled back.
+  - (c) `appendAudit` with a timestamp not in `…Z` format is refused, and `last_seq` is unmoved.
+  - (d) A corrupt history row injected by the owner fails closed with `RuntimeException` on read.
+
+### Part B: Phase 6c, `MySQLCatalogRepository`
+
+Files you may create:
+- `app/Enrollment/Repositories/MySQLCatalogRepository.php`
+- `tests/Enrollment/CatalogRepositoryContract.php`
+- `tests/Enrollment/CatalogRepositoryContractTest.php`: the mock (`MockCatalogRepository`), offline
+- `tests/Enrollment/CatalogRepositoryContractMySQLTest.php`: owner connection for setup; **repository on the app connection** (A/M1)
+- the report append
+
+Requirements:
+- **Interface:** `CatalogRepositoryInterface`, unchanged. Copy `MockCatalogRepository`'s observable behaviour exactly:
+  - terms: ordering, unique code 409, the single `is_current` switch, the merged-row `$check` inside the lock
+  - sections: unique triple 409, unknown term 422, `delivery_mode`, meetings (order preserved via `position`, replaced as a whole on PATCH), capacity ≥ `approved_count` via `$check`, and `remaining` computed, not stored
+  - search filters, order and pagination with escaped `LIKE`
+  - `findSection`, `assignedFacultyIds` (assignment order via `assigned_seq`), `sectionIdsForFaculty`
+  - `assignInstructor` / `unassignInstructor`: 404/409 messages; the 5-instructor cap; the **instructor schedule-conflict 409** (same term, overlapping meetings on the same day, back-to-back allowed, every meeting counts whatever `delivery_mode` says); the same conflict check on section PATCH in the same lock; gap-free `section_instructor_history` seq from the `repository_locks` `enrollment` row; exactly one history row per success and none on failure
+- **Locking:**
+  - Every write takes `repository_locks` name `enrollment` `FOR UPDATE` first.
+  - All decision reads happen after the lock.
+  - No `PDOException`/`Throwable` is swallowed inside callbacks (`ARCHITECTURE.md` §6.3).
+- **Errors and statements:**
+  - Prepared statements only.
+  - Generic `RuntimeException('Catalog repository unavailable.')` on driver errors; fixed `HttpException` messages pass through.
+  - Rows fail closed via `Term::fromArray` / `Section::fromArray`.
+  - Injected PDO; no env access or connecting; no DDL.
+- **Foreign keys:**
+  - `section_instructors.faculty_id` → `faculty.id`, so the MySQL fixture inserts faculty rows through the owner connection first.
+  - **Don't create a faculty repository.**
+  - Document the stricter foreign-key behaviour as a deviation.
+- **Grants:** every statement must fit `app_grants.sql`. That's proven by M1, which runs it as `ais_test_app`.
+- **Out of scope:** T-22 `approved_count` writes. Read-only `approved_count` is fine.
+
+### Checks for both parts
+- Offline: `php tests/run.php` green (205 + new offline cases); `php -l` on everything.
+- Online: write the tests; they will be NOT RUN by Codex, because there's no DB access. Claude runs them on `ais_test`.
+- Report: files, the behaviour mapping, deviations, counts.
+
+---
+
 ## T-60 Phase 6b → CODEX: MySQL student repository + program catalog (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
 
 - **Prerequisite done:** 6a (auth) verified online on `ais_test` (7/7 MySQL contract cases) and merged into the lead branch (`9f391b3`).
