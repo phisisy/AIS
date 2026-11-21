@@ -169,3 +169,61 @@ All driver failures are mapped to generic `RuntimeException` messages without SQ
 - `php tests/run.php`: **205 passed, 0 failed, 205 total** (198 baseline plus seven new offline contract cases).
 - `php -l` on all **134** PHP files: **0 failures**.
 - Online contract: **NOT RUN**. When enabled, each of the seven shared cases plus the MySQL-only foreign-key case resets and migrates guarded `ais_test`, then seeds referenced users and programs through the tester connection before exercising the adapters. No MariaDB connection was attempted in this sandbox.
+
+---
+
+# T-60 Phase 7.2 implementation report (2026-11-21)
+
+Baseline: `task/T-60-impl` at `4a276ad`. Tests only; no Git writes, application changes, wiring, or MariaDB connection.
+
+## Files created
+
+- `tests/Database/fixtures/mysql_worker.php`: one JSON result per separate PHP process, real adapter calls as `ais_test_app`, bounded start waits and session lock timeouts. T3 additionally uses a guarded tester connection for the deliberate inverted lock order.
+- `tests/Database/MySQLConcurrencySupport.php`: guarded fixture reset and migrations, identity seeding, file barriers, parent-held store locks, bounded process polling, hard process timeout and cleanup.
+- `tests/Auth/UserConcurrencyMySQLTest.php`: A1–A4.
+- `tests/Students/StudentConcurrencyMySQLTest.php`: S1–S4.
+- `tests/Enrollment/CatalogConcurrencyMySQLTest.php`: C1–C6.
+- `tests/Database/TransactionIntegrityMySQLTest.php`: T1–T4.
+- This report: append only.
+
+## Per-invariant mapping
+
+| Invariant | Test name | Online result |
+|---|---|---|
+| A1 | MySQL A1: concurrent user field updates preserve both changes | NOT RUN |
+| A2 | MySQL A2: competing role sets stay atomic and version bumps match | NOT RUN |
+| A3 | MySQL A3: simultaneous admin demotions preserve one active admin | NOT RUN |
+| A4 | MySQL A4: audit ids and lock counter include committed writes only | NOT RUN |
+| S1 | MySQL S1: student updates of separate fields are both kept | NOT RUN |
+| S2 | MySQL S2: student history has one gap-free entry per tracked change | NOT RUN |
+| S3 | MySQL S3: duplicate student number and account races reject losers | NOT RUN |
+| S4 | MySQL S4: thrown check leaves no partial student row or history | NOT RUN |
+| C1 | MySQL C1: concurrent current-term switches leave exactly one | NOT RUN |
+| C2 | MySQL C2: separate section patches preserve every field | NOT RUN |
+| C3 | MySQL C3: overlapping faculty assignments admit one winner | NOT RUN |
+| C4 | MySQL C4: fifth-instructor race enforces the cap | NOT RUN |
+| C5 | MySQL C5: assignment history is gap-free and replays to current rows | NOT RUN |
+| C6 | MySQL C6: meeting patch and assignment cannot create conflict | NOT RUN |
+| T1 | MySQL T1: injected mid-operation failures roll back all affected tables | NOT RUN |
+| T2 | MySQL T2: commit and rollback both release the auth lock | NOT RUN |
+| T3 | MySQL T3: one cross-store deadlock victim rolls back and survivor commits | NOT RUN |
+| T4 | MySQL T4: lock timeout is sanitized and writes nothing | NOT RUN |
+
+Each group runs three rounds; S3 tests both duplicate keys and T2 tests both commit and rollback in every round. Registration requires `AIS_MYSQL_TESTS=1`, `AIS_MYSQL_TEST_APP_PASSWORD`, and `MySQLTestSupport::enabled()`. The existing offline registration count is unchanged.
+
+## Synchronization and limits
+
+The parent uses `ais_tester` to begin a transaction and hold the relevant `repository_locks` row `FOR UPDATE` before releasing worker start flags. Workers publish ready and attempt flags, then invoke adapters on independent connections. The parent confirms all processes remain live while its lock is held, commits, collects one JSON line per worker, and verifies final rows through the tester connection. Polls are bounded and processes are killed on timeout. Worker sessions set `innodb_lock_wait_timeout`; parent transactions and worker connections are cleaned up in `finally`.
+
+T3 creates a deterministic two-row lock cycle: the auth adapter holds `auth` and its callback requests `students`, while the student adapter holds `students` and its `$check` requests `auth`. The extra row locks require tester privileges. Exactly one 1213 victim and one commit are asserted, along with sanitized exception and full rollback of the victim's user/audit or student/history writes. Adapter-only deadlock absence is **argued from the current one-store-lock-per-operation design, not proven** by this deliberately cross-store test. T4 holds `auth` until the worker's bounded lock wait ends; an independent raw lock probe on the same app connection confirms server code 1205 after the repository has returned its sanitized failure.
+
+Worker scheduling after the parent releases the lock cannot be fixed portably. Tests accept either winning order and assert the required final invariant. The harness prints each round's observed worker completion order by job index; completion order is not asserted to be database lock-acquisition order. No online orderings have yet been observed. The live-process poll confirms pending calls but does not independently inspect `INNODB_TRX` or prove each worker has reached InnoDB; the start and attempt flags plus parent-held lock constrain the race. T2's follow-up write uses the same worker connection after each commit or rollback to test transaction closure before process exit.
+
+## Verification
+
+- `APP_RUNTIME_PATH` used `%TEMP%\ais-codex-t60-phase72-runtime`, outside OneDrive; `AIS_MYSQL_TESTS=0`.
+- `php tests/run.php`: **211 passed, 0 failed, 211 total**.
+- `php -l` across **144 PHP files**: **0 failures**.
+- Online MariaDB tests: **NOT RUN** because MariaDB is unreachable from this sandbox. The PASS/FAIL status of every invariant remains unverified until the guarded `ais_test` run.
+
+Fixture correction: every concurrency user now has one valid role: users 1-2 `admin`, 3-8 `faculty`, and 9-12 `student`. A2's two allowed final role sets and unchanged role-only `auth_version` expectation still apply. T3's auth worker can now reach its bounded cross-lock barrier after loading user 3; online behavior remains unverified here.
