@@ -152,3 +152,14 @@ It is **not equivalent** to the JSON mock's per-request snapshot replay. Between
   - This doesn't appear in `SHOW GRANTS` and doesn't affect `ais_test`, but it breaks least privilege.
   - Fix (root, owner): remove the anonymous `test` database rows and drop the `test` database (`SECURITY.md` §8).
 
+## Phase 6 compatibility findings (6a auth, 6b students; 2026-11-21)
+
+| Finding | Impact | Status |
+|---|---|---|
+| Entity ids (`users.id`, `students.id`) come from AUTO_INCREMENT, so a rolled-back insert can leave a gap | None: no interface promises gap-free entity ids. Audit and history `seq` stay gap-free (lock row or MAX+1 under the lock) | Accepted |
+| `user_roles` has no order column; MySQL returns roles sorted | None through the API: `UserService::roles()` sorts and deduplicates before every write. **Phase 8 import:** JSON roles written outside the service may be unsorted, so the import must compare them as sets | Note for Phase 8 |
+| `DATETIME` columns accept only the service's UTC `Y-m-d\TH:i:s\Z` timestamps | None: the service is the only writer | Accepted |
+| Foreign keys require an existing user (audit actor, student account) and program | None through the API: the services check these first. A direct repository call with an unknown id now fails, where the mock accepted it | Accepted (stricter) |
+| `MySQLProgramCatalog::all()` orders by code; the JSON catalog keeps file order | None: the only caller (`AcademicRecordService::programs`) sorts by code itself | Accepted |
+| Search: SQL `LOWER()` and PHP `mb_strtolower` may differ for rare Unicode case mappings | Very rare search mismatches for unusual characters; no security impact | Accepted, documented |
+
