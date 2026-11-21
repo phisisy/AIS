@@ -4,6 +4,60 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
+## T-60 Phase 7.2 → CODEX: MariaDB concurrency and transaction-integrity tests (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
+
+- **Authorization:** owner, 2026-11-21. **Tests only.**
+  - Don't change any existing repository, service, model or interface. If a test exposes a defect, **stop and report it**; don't fix the adapter.
+  - Not authorized: wiring, `APP_REPOSITORY=mysql`, `ais` or import, a faculty repository, T-22, merge, push.
+  - No automatic retries.
+- **Branch and worktree:** `task/T-60-impl` in `..\AIS_CODEX_T60`, fast-forwarded to this commit. No git writes by Codex.
+- **Files you may create (plan §7, row 7.2, minus wiring), and nothing else:**
+  - `tests/Database/fixtures/mysql_worker.php`: a CLI worker for the concurrency tests
+  - `tests/Database/MySQLConcurrencySupport.php`: the barrier and race helper; a new file is allowed
+  - `tests/Auth/UserConcurrencyMySQLTest.php`
+  - `tests/Students/StudentConcurrencyMySQLTest.php`
+  - `tests/Enrollment/CatalogConcurrencyMySQLTest.php`
+  - `tests/Database/TransactionIntegrityMySQLTest.php`: deadlock, rollback and orphans
+  - an append to `ai-coordination/T60_IMPLEMENTATION_REPORT.md`
+  - `WiringMySQLTest.php` is **out of scope** (no wiring).
+- **Harness design** (copy the existing JSON race helpers' style: `tests/Enrollment/EnrollmentConcurrencyTest.php` `raceEnrollmentWorkers`, `tests/Auth/AdminConcurrencyTest.php`):
+  - **Separate PHP worker processes** (`proc_open`, `PHP_BINARY`). PDO calls block, so in-process concurrency isn't possible.
+  - The workers inherit the guarded env. Each one connects **as `ais_test_app` via `MySQLTestSupport::connectApp()`**, runs one repository operation through the real MySQL adapter, and prints one JSON line: `ok`, `status`, `message`, and `class` for unexpected exceptions. Never print SQL, driver text or env values.
+  - **Setup and verification:** the parent uses `MySQLTestSupport::connect()` (`ais_tester`), with a guarded reset plus migrations, then fixtures, then the race, then checks on the final state.
+  - **Deterministic sync:**
+    - (1) A start barrier: workers write a ready-flag, then wait for a start-flag file, with a bounded poll (≤ 15 s) and fail-safe exit.
+    - (2) **Controlled contention:** where ordering matters, the parent (owner connection) takes `SELECT … FROM repository_locks WHERE name=? FOR UPDATE` in an open transaction **before** releasing the workers. It confirms they are blocked (for example through `information_schema.INNODB_TRX` or `PROCESSLIST` as `ais_tester`; if there's no PROCESS privilege, a bounded wait for "not finished"), then commits, and the workers proceed one at a time.
+    - **Not sleep-only:** sleeps may only be bounded poll intervals.
+  - **Bounded waits:** set `innodb_lock_wait_timeout` (session) to a small bound (for example 10 s) in the workers. Every `proc_open` has a hard overall timeout, and on timeout the parent kills the workers and fails the test. Always close connections and roll back the parent's open transactions in `finally`.
+  - **Run each race ≥ 3 rounds.** Record the observed orderings.
+- **Required invariants (one assertion group each; report PASS, FAIL or UNVERIFIED):**
+  - **Auth:**
+    - A1: concurrent updates of different fields on one user are both kept (no lost update).
+    - A2: competing role changes: the final roles equal one complete write's set, never a mix; `auth_version` bumps match the committed changes.
+    - A3: **two active admins, two simultaneous demotions (or deactivations): exactly one succeeds, the other gets 409 `LAST_ADMIN_MESSAGE`, and active admins never reach 0.**
+    - A4: audit ids are gap-free and match committed writes exactly; no orphan audit rows from failed writes; `repository_locks('auth').last_seq = MAX(audit_logs.id)`.
+  - **Students:**
+    - S1: concurrent updates of different fields on the same student: both kept.
+    - S2: per-student history `seq` is gap-free 1..n, with entries equal to the committed tracked changes.
+    - S3: a duplicate student number, or a duplicate `user_id` create race: exactly one wins, the others get 409.
+    - S4: a failing update (thrown `$check`) racing successful ones leaves no partial row or history.
+  - **Catalog:**
+    - C1: two terms set current concurrently: exactly one is current at the end.
+    - C2: concurrent section PATCHes of different fields: all kept.
+    - C3: **the same faculty assigned concurrently to two overlapping sections in one term: exactly one wins, the other gets 409.**
+    - C4: concurrent assignments to one section with 4 existing instructors: exactly one 5th succeeds, the rest get 409 at the cap.
+    - C5: `section_instructor_history` seq is gap-free, matches committed assigns and unassigns, and replays to the current `section_instructors` (order via `assigned_seq`).
+    - C6: **a section meeting PATCH racing an assignment that would conflict: the final state has no instructor conflict** (one 409), whatever the order.
+  - **Transaction integrity:**
+    - T1: an atomic commit or rollback for a failure injected mid-operation, through the owner connection or a thrown callback, has no partial rows in any table.
+    - T2: locks are released after a commit and after a rollback; a follow-up write proceeds immediately.
+    - T3: **a deliberate deadlock between two worker connections** (for example A locks auth then students and B locks students then auth, built with tester-level row locks where the app grants don't allow it). MariaDB reports 1213 for exactly one of them; the victim's repository call fails with the sanitized `RuntimeException` and rolls back completely; the other commits. Record whether a deadlock can arise **through the adapters alone**. Expected: no, since each operation takes one store lock row; say whether that's proven or only argued.
+    - T4: a lock-wait timeout (1205) from a held lock gives a sanitized failure with nothing written.
+- **Everything runs only against `ais_test`.** The guard is re-checked before every reset. Never connect to another database.
+- **Codex can't reach MariaDB.** Write the tests, make sure they register only when `MySQLTestSupport::enabled()` and the app password is present, run the offline suite (211 must stay green) and `php -l`, and report the online tests as NOT RUN. Claude runs them online and records the results.
+
+---
+
 ## T-60 review fixes (A) + Phase 6c (B) → CODEX (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
 
 - **Authorization:** owner, 2026-11-21.
