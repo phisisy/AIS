@@ -138,3 +138,17 @@ It is **not equivalent** to the JSON mock's per-request snapshot replay. Between
 2. **MariaDB 10.4.32 is development-only** (end-of-life, S7). Production must use a supported release, for example 10.11 LTS, and Phase 7 must be re-run on it before any cutover.
 3. **`migrate.php status` on an empty database** prints "No changes." instead of listing the pending migrations. Cosmetic, with no safety impact. It goes to Codex in a later round.
 
+## Phase 5 final online verification (2026-11-21)
+
+- **Accounts:** `ais_tester@127.0.0.1` has `USAGE` plus `ALL ON ais_test.*`. `ais_test_app@127.0.0.1` has `USAGE` plus **exactly the 15 approved table grants** (checked one by one).
+- **Suite:** 195/195 with the MariaDB tests enabled (191 offline + 4 online: migrations, constraints and locking, guard and session, privileges). 191/191 offline. `php -l` 124/124.
+- **Privilege denials as `ais_test_app`, all error 1142:**
+  - UPDATE and DELETE on `audit_logs`, `student_academic_history`, `section_instructor_history` and `faculty_history`
+  - DELETE on `users`, `students`, `faculty`, `terms` and `sections`
+  - INSERT on `programs`
+  - DROP, ALTER and CREATE
+- **Hardening finding (owner action):**
+  - XAMPP's default `mysql.db` rows give **every** account access to the `test` and `test\_%` databases. A probe as `ais_test_app` on `test` returned 1146 (no such table), not an access denial.
+  - This doesn't appear in `SHOW GRANTS` and doesn't affect `ais_test`, but it breaks least privilege.
+  - Fix (root, owner): remove the anonymous `test` database rows and drop the `test` database (`SECURITY.md` §8).
+

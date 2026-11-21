@@ -28,7 +28,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-32 | 5 | Grade entry, submission, finalization | T-31, B-05 | PROPOSED |
 | T-39 | All | Cross-module integration tests | T-32 | PROPOSED |
 | T-40 | 2–5 | MySQL repositories | B-03 → T-60 | Folded into T-60 Phases 6–7 (file list amended, OQ-14) |
-| T-60 | 6 | MariaDB foundation: schema, migrations, tools, MySQL adapters (ais_test only) | T-21 ✔ | IN_PROGRESS: Phase 5 verified online on ais_test (2026-11-21): V0001–V0006 applied, repeat no-op, checksum tamper refused, 194/194 with online tests (191 offline), 124/124 lint. One defect found and fixed (V0002 CHECK on AUTO_INCREMENT, `7770ced`). Pending: privilege test (owner applies ais_test_app grants). **Awaiting owner approval for Phase 6.** No cutover, no merge |
+| T-60 | 6 | MariaDB foundation: schema, migrations, tools, MySQL adapters (ais_test only) | T-21 ✔ | Phase 5 VERIFIED on ais_test (2026-11-21): V0001–V0006, repeat no-op, checksum tamper refused, 195/195 with online + privilege tests, app grants exactly as approved, all forbidden ops 1142. Open hardening item: XAMPP `test` database open to all accounts (owner). **Awaiting owner approval for Phase 6.** No cutover, no merge |
 
 Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. They do overlap on
 `app/bootstrap.php`, so bootstrap/route registration edits must happen one task at a time.
