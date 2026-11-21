@@ -227,3 +227,56 @@ Worker scheduling after the parent releases the lock cannot be fixed portably. T
 - Online MariaDB tests: **NOT RUN** because MariaDB is unreachable from this sandbox. The PASS/FAIL status of every invariant remains unverified until the guarded `ais_test` run.
 
 Fixture correction: every concurrency user now has one valid role: users 1-2 `admin`, 3-8 `faculty`, and 9-12 `student`. A2's two allowed final role sets and unchanged role-only `auth_version` expectation still apply. T3's auth worker can now reach its bounded cross-lock barrier after loading user 3; online behavior remains unverified here.
+
+---
+
+# T-60 Phase 8 tooling report (2026-11-21)
+
+Baseline: `task/T-60-impl` at `6a6547c`. No Git writes, app wiring, production database use, or MariaDB connection.
+
+## Files
+
+- Created `database/verify.php`, `database/import_json.php`, `database/tools/IntegrityVerifier.php`, `database/tools/JsonImporter.php`.
+- Created `tests/Database/VerifyMySQLTest.php`, `tests/Database/ImportMySQLTest.php`, `tests/Database/ImportOfflineTest.php`.
+- Appended this report only; no other existing file changed.
+
+## Import mapping and behavior
+
+| Module | JSON source | SQL target and conversion |
+|---|---|---|
+| auth | `auth/users.json`: `users[]`, `audit[]` | `users` with original id/hash/version; sorted role set into `user_roles`; audit entries into `audit_logs`, UTC `at` to DATETIME and `changes` to JSON text. Lock `auth.last_seq = MAX(audit_logs.id)`. |
+| students | `students/programs.json`: `programs[]`; `students/students.json`: `students[]`, `history{id:[]}` | `programs`, original-id `students`, per-student original-seq `student_academic_history`; `from`/`to` become typed text, UTC instants become DATETIME. The `students` lock counter stays 0 because this stream uses per-student `MAX(seq)+1`, not a global lock counter. |
+| enrollment | `enrollment/enrollment.json`: `terms[]`, `sections[]`, `assignments[]`, `assignment_history[]` | Original-id `terms` and `sections`; meeting array index becomes `section_meetings.position`; history preserves global seq; each current assignment gets `assigned_seq` from its latest `assigned` event. Lock `enrollment.last_seq = MAX(section_instructor_history.seq)`. |
+
+The importer checks CLI arguments, `ais_test` configuration and live database/port/account, loopback host, fully applied schema, clean target, empty module tables and zero lock counter. It validates the mock source before raw JSON, including extra raw checks for gaps, duplicate keys, replay, timestamps and audit shape. One transaction locks the module row, inserts, compares counts and mock/MySQL interface results (roles as sets), and runs all verifier checks before commit. Any failure rolls back; `--dry-run` always rolls back. A non-empty module is refused on repeat, with no merge or overwrite. Missing faculty rows abort enrollment; `--module=faculty` is refused until T-30. The source JSON is read only.
+
+## Verifier checks
+
+`verify.php` uses a single REPEATABLE READ, read-only consistent snapshot and SELECTs for rows. It prints only check names, PASS/FAIL, and numeric row ids where a table has them. Checks: `user_model`, `user_roles`, `program_model`, `student_model`, `student_history_seq`, `student_history_replay`, `student_year_level`, `term_model`, `current_term`, `section_model`, `scheduled_meetings`, `meeting_self_overlap`, `assignment_history_seq`, `assignment_history_replay`, `assignment_assigned_seq`, `instructor_cap`, `instructor_overlap`, `faculty_model`, `faculty_history_seq`, `faculty_history_replay`, `audit_ids`, and `repository_last_seq`. Programs and lock rows have string keys; their failures are named without printing those values.
+
+## Test matrix
+
+| Cases | Test names | Result here |
+|---|---|---|
+| E1, E2, E3, E9, E10, E11, V1, V3 | `Phase 8 E1 E2 E3 E9 E10 E11 V1 V3: full import preserves data and verifies read-only` | NOT RUN (online) |
+| E4, E6 | `Phase 8 E4 E6: corrupt source aborts before any write` | NOT RUN (online) |
+| E5, E7 | `Phase 8 E5 E7: SQL foreign-key failures roll back the whole module` | NOT RUN (online) |
+| E4, E8, E12 | `Phase 8 E4 E8 E12: non-empty target refuses repeat; dry run writes nothing` | NOT RUN (online) |
+| V2 | `Phase 8 V2: verifier names each cross-row corruption and prints ids only` | NOT RUN (online) |
+| V4 | `Phase 8 V4: verifier database failure is sanitized` | NOT RUN (online) |
+| E12, offline refusals | Five `Phase 8 offline:` tests for target, database, host, account, faculty and usage | PASS |
+
+Online files register only when `MySQLTestSupport::enabled()` and `AIS_MYSQL_TEST_APP_PASSWORD` are present. Each online case uses a disposable mock runtime under the system temp directory, guarded reset and migration, and cleanup in `finally`. The source is checked byte-for-byte. The guarded online run is required to confirm behavior, including the live target/account checks; it was not attempted here because MariaDB is unreachable from this sandbox.
+
+## Verification and limits
+
+- `APP_RUNTIME_PATH` was set under `%TEMP%\ais-codex-t60-phase8-runtime`, outside OneDrive.
+- `php tests/run.php`: **216 passed, 0 failed, 216 total** (211 existing plus five new offline tests).
+- `php -l` on all **151 PHP files**: **151 passed**.
+- MariaDB online tests: **NOT RUN**. No online behavior is claimed as verified.
+- This branch has no `App\Faculty\Models\Faculty` or `MockFacultyRepository`. The verifier checks faculty row structure and faculty-history replay directly, but cannot call `Faculty::fromArray` until T-30 supplies it. The owner must decide whether to require a follow-up verifier update after T-30. Faculty import remains deferred.
+- The students lock-counter interpretation follows the existing MySQL adapter: student history seq is per student and the lock counter remains 0. The handoff's broad “stream maximum” wording should be clarified by the owner if a different counter is intended.
+
+### Phase 8 Windows runtime path correction (2026-11-21)
+
+The importer now accepts both backslash and slash separators in absolute runtime paths and refuses relative input paths as well as invalid canonical paths. A scan of `IntegrityVerifier.php` and both Phase 8 CLIs found no other affected regex. The new offline option-parsing test uses a real temporary directory and checks relative and URL-like refusals. Direct PHP regex checks matched both `C:\Users\x` and `C:/Users/x`; `php tests/run.php` passed **217/217** with `AIS_MYSQL_TESTS=0` and a scratch `APP_RUNTIME_PATH` outside OneDrive. Online MariaDB tests were not run.
