@@ -4,6 +4,39 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
+## T-60 Phase 6a → CODEX: MySQL user repository (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
+
+- **Authorization:** owner, 2026-11-21. Phase 6 runs incrementally, **auth (6a) first, then students (6b)**.
+  - **Not authorized:** faculty (waits for T-30 to merge); enrollment repositories (wait for T-22 approval; the 6c catalog scope is an open owner question).
+  - **Also not authorized:** `APP_REPOSITORY=mysql` for the app, bootstrap wiring, an `ais` database or data import, merge, push.
+- **Branch and worktree:** `task/T-60-impl` in `..\AIS_CODEX_T60`, fast-forwarded by Claude to the T-60 lead branch at the commit that adds this handoff. **No git writes by Codex.**
+- **Files you may create (plan §7, row 6a), and nothing else:**
+  - `app/Auth/Repositories/MySQLUserRepository.php` and `app/Auth/Repositories/MySQLUserTransaction.php`
+  - `tests/Auth/UserRepositoryContract.php`: shared contract bodies, taking a factory
+  - `tests/Auth/UserRepositoryContractTest.php`: runs the contract against `MockUserRepository`, offline, always
+  - `tests/Auth/UserRepositoryContractMySQLTest.php`: runs the same contract against MySQL; registers only when `MySQLTestSupport::enabled()`; guarded reset plus migrations before each test
+  - an append to `ai-coordination/T60_IMPLEMENTATION_REPORT.md`
+- **Interfaces are unchanged** (S10): `UserRepositoryInterface`, `UserAdminRepositoryInterface` (including `LAST_ADMIN_MESSAGE`) and `UserTransactionInterface` (including `AUDIT_KEYS`). Copy `MockUserRepository`'s **observable behaviour** exactly: return values, exception types and messages, ordering, the audit entry shape, auth_version bumps, the last-admin rule. Don't edit any existing file in `app/`, including the mock, the models, the services and `Database.php`.
+- **Design specs:**
+  - `docs/database/ARCHITECTURE.md` §6 (one `repository_locks` row per store: `SELECT … FOR UPDATE` on `name='auth'` at the start of every write transaction), §7 (gap-free `audit_logs.id` from the lock row's `last_seq`), §10.
+  - `DATA_DICTIONARY.md` (`users`, `user_roles`, `audit_logs`).
+  - `BLOCKERS.md` §2, the compatibility table: per-row validation through `User::fromArray`, fail closed.
+  - `SECURITY.md`: prepared statements only, and no secrets in audit rows.
+- **Rules:**
+  - Construct the repository from an injected `PDO`; never read env or connect inside it.
+  - Every write is one transaction, rolled back on any exception.
+  - No DDL in application code.
+  - Map driver errors to the same exceptions the mock throws (for example a duplicate email → the same `HttpException` 409 the mock gives).
+  - Never leak SQL or driver text.
+- **Tests:**
+  - The contract covers every interface method: found and not found, email normalisation, search pagination and ordering, insert/update, role replacement, the last-admin protection, the audit append and its keys, `auditEntries` order, and rollback on a thrown operation leaving no partial write.
+  - A **concurrency test is not in 6a** (it's Phase 7.2); keep transactions safe for it.
+  - Offline: `php tests/run.php` must stay green with no DB (186 existing + 5 T-60 + the new offline contract tests).
+- **Codex can't reach MariaDB** (sandbox, no network). Write the online test and report it as NOT RUN. Claude runs it against `ais_test` with the guarded environment. Never connect to or create any database yourself.
+- **Report:** files, the behaviour mapping (mock vs MySQL), deviations, the offline counts and the expected online coverage.
+
+---
+
 ## T-60 Phase 5 → CODEX (prepared by Claude, 2026-11-21) — DONE; ONLINE-VERIFIED by Claude on ais_test
 
 > **Online verification (2026-11-21):**
