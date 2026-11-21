@@ -4,6 +4,35 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
+## T-60 Phase 6b → CODEX: MySQL student repository + program catalog (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
+
+- **Prerequisite done:** 6a (auth) verified online on `ais_test` (7/7 MySQL contract cases) and merged into the lead branch (`9f391b3`).
+- **Same rules as the 6a handoff below:** owner-authorized; `ais_test` only; no git writes by Codex; no faculty, enrollment or catalog work; no wiring.
+- **Files you may create (plan §7, row 6b), and nothing else:**
+  - `app/Students/Repositories/MySQLStudentRepository.php`
+  - `app/Students/Repositories/MySQLProgramCatalog.php`
+  - `tests/Students/StudentRepositoryContract.php`
+  - `tests/Students/StudentRepositoryContractTest.php`: mock (`MockStudentRepository` + `JsonProgramCatalog`), offline, always
+  - `tests/Students/StudentRepositoryContractMySQLTest.php`: guarded, only when `MySQLTestSupport::enabled()`; reset + migrate per test; programs seeded through the tester connection, because `ais_test_app` can't write `programs`
+  - an append to `ai-coordination/T60_IMPLEMENTATION_REPORT.md`
+- **Interfaces unchanged:** `StudentRepositoryInterface` and `ProgramCatalogInterface`. Copy the observable behaviour of `MockStudentRepository` and `JsonProgramCatalog` exactly:
+  - `search` filters, ordering, pagination and total
+  - `create` uniqueness 409s (student number, user) with the same messages
+  - `update` with the `$check` callback **inside** the lock, on the merged row, so a thrown check aborts with nothing written
+  - immutable fields; `history` order, pagination and `total`
+  - creation and update history entries per tracked field (`program_code`, `year_level`, `academic_status`), with the same `actor_id` semantics (0 = system), never truncated
+  - the program foreign key and existence behaviour
+- **Design specs:**
+  - `ARCHITECTURE.md` §6: every write locks `repository_locks` name `students` `FOR UPDATE`.
+  - `ARCHITECTURE.md` §7: per-student gap-free `seq` = `MAX(seq)+1` under that lock.
+  - `DATA_DICTIONARY.md`: `programs`, `students`, `student_academic_history`.
+  - `BLOCKERS.md` §2: rows validated through `Student::fromArray` and `Program`, failing closed.
+  - Prepared statements only; escaped `LIKE`; generic `RuntimeException` on driver errors; an injected `PDO`; no env access or connecting; no DDL.
+- **Students reference `users`:** the MySQL contract fixture must create the referenced user rows first. Use plain tester-connection inserts or the 6a `MySQLUserRepository`; don't change 6a files.
+- **Codex can't reach MariaDB.** Write the online test and report it as NOT RUN; Claude runs it against `ais_test`. Offline: `php tests/run.php` green (198 + the new offline contract tests). `php -l` on everything.
+
+---
+
 ## T-60 Phase 6a → CODEX: MySQL user repository (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
 
 - **Authorization:** owner, 2026-11-21. Phase 6 runs incrementally, **auth (6a) first, then students (6b)**.
