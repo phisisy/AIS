@@ -4,7 +4,15 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
-## T-60 Phase 5 → CODEX (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
+## T-60 Phase 5 → CODEX (prepared by Claude, 2026-11-21) — DONE; ONLINE-VERIFIED by Claude on ais_test
+
+> **Online verification (2026-11-21):**
+> - Pre-checks passed: target, account `ais_tester@127.0.0.1`, guard, strict/UTC/nopad_bin.
+> - Guarded reset, then V0001–V0006 applied; a repeat `up` was a no-op.
+> - A tampered checksum was refused, and `--target=ais` was refused.
+> - 194/194 tests with the online tests enabled.
+> - Defect V0002 `ck_users_id` (MariaDB 10.4 error 1901) fixed by Codex in `7770ced`.
+> - The privilege test is not run yet: it needs root-applied grants for `ais_test_app`, and the env name `AIS_MYSQL_TEST_APP_PASSWORD`.
 
 - **Authorization:** owner, 2026-11-21. Phases 4–8 against **`ais_test` only**. No cutover, no `APP_REPOSITORY=mysql` for the app, no merge, no push. Safeguards S1–S10 in `docs/plans/T-60-database-architecture.md` §0 are binding.
 - **Branch and worktree:** `task/T-60-impl` in `..\AIS_CODEX_T60`, created by Claude from the T-60 lead branch at the commit that adds this handoff (code = Phase 4 `cf4af7d`). **No git writes by Codex**; Claude commits after verification.
