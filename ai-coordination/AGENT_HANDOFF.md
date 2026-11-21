@@ -4,6 +4,25 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
+## T-60 Phase 5 → CODEX (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
+
+- **Authorization:** owner, 2026-11-21. Phases 4–8 against **`ais_test` only**. No cutover, no `APP_REPOSITORY=mysql` for the app, no merge, no push. Safeguards S1–S10 in `docs/plans/T-60-database-architecture.md` §0 are binding.
+- **Branch and worktree:** `task/T-60-impl` in `..\AIS_CODEX_T60`, created by Claude from the T-60 lead branch at the commit that adds this handoff (code = Phase 4 `cf4af7d`). **No git writes by Codex**; Claude commits after verification.
+- **Scope, Phase 5 only** (plan §6–§7): `database/migrations/V0001__infrastructure.sql` … `V0006__section_instructors.sql`, `database/grants/app_grants.sql`, `database/migrate.php`, `database/tools/MigrationRunner.php`, `tests/Database/{MySQLTestSupport,TestDatabaseGuardTest,TestDatabaseGuardMySQLTest,MigrationRunnerTest,MigrationMySQLTest,ConstraintMySQLTest,PrivilegeMySQLTest}.php`, `ai-coordination/T60_IMPLEMENTATION_REPORT.md`. Nothing else.
+- **Specs:**
+  - DDL: `docs/database/DATA_DICTIONARY.md` §7. Confirmed tables only; no T-22, T-32 or D1 DDL (OQ-11).
+  - Migrations and runner: `CONSTRAINTS_AND_MIGRATIONS.md`.
+  - Guard and grants: `SECURITY.md` §1.1 and §6, **conditions 1–8** (S2: an independent `AIS_MYSQL_TEST_TARGET` plus a live re-check immediately before every reset).
+  - CLI contract: plan §4.3.
+- **Must use** `App\Core\Database::connect()`, so every connection gets strict `sql_mode` and UTC (S3). A MySQL test asserts `@@SESSION.sql_mode` and `@@SESSION.time_zone` on a real connection.
+- **S8, real-MariaDB tests:** CHECK-constraint REGEXP behaviour (including the `\z` escaping), binary-collation equality and `LOWER() LIKE` search, uniqueness on generated columns, gap-free history sequencing via `repository_locks`, duplicate and foreign-key violations, and RESTRICT on delete.
+- **S5:** V0005/V0006 (faculty) apply to `ais_test` only. The runner refuses them on any other target until T-30 is merged (documented rule; test it).
+- **Offline by default:** `php tests/run.php` must stay green **with no database**, because the MySQL test files register no tests unless `AIS_MYSQL_TESTS=1` and the guard passes. The offline guard and runner tests always run.
+- **Online tests** need the owner's MariaDB setup. If it isn't ready, write the online tests and report them as **not yet run**. Don't fake results, and don't start, configure or connect to any database other than `ais_test`.
+- **Never:** connect as root; touch an `ais` database; edit interfaces, models, services, mock repositories, bootstrap, config or routes.
+
+---
+
 ## T-21 → RE-REVIEW of corrected commit (prepared by Claude, 2026-11-20) — REVIEWED: APPROVE
 
 > **Re-review #2:** separate session, worktree `..\AIS_REVIEW_T21_R2`, result **APPROVE** on exactly `417ba6a76421d3dfdf19cd6a1d0b4f9736baa89e` (`T21_REREVIEW_REPORT.md`).
