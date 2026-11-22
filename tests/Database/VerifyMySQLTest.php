@@ -22,6 +22,19 @@ function phase8InjectAdditionalFaculty(PDO $owner, int $first, int $last): void
 if (phase8OnlineEnabled()) {
     test('Phase 8 V2: verifier names each cross-row corruption and prints ids only', static function (): void {
         $cases = [
+            'invalid student model' => ['student_model', static function (PDO $db): void {
+                $db->exec('SET SESSION check_constraint_checks = OFF');
+                try { $db->exec('UPDATE students SET year_level = 0 WHERE id = 1'); }
+                finally { $db->exec('SET SESSION check_constraint_checks = ON'); }
+            }],
+            'wrong meeting position' => ['section_model', static function (PDO $db): void {
+                $db->exec('UPDATE section_meetings SET position = 5 WHERE section_id = 1 AND position = 1');
+            }],
+            'invalid faculty model' => ['faculty_model', static function (PDO $db): void {
+                $db->exec('SET SESSION check_constraint_checks = OFF');
+                try { $db->exec("UPDATE faculty SET first_name = '' WHERE id = 1"); }
+                finally { $db->exec('SET SESSION check_constraint_checks = ON'); }
+            }],
             'student history gap' => ['student_history_seq', static function (PDO $db): void {
                 $db->exec('UPDATE student_academic_history SET seq = 9 WHERE student_id = 1 AND seq = 4');
             }],

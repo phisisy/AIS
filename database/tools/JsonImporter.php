@@ -27,11 +27,16 @@ final class JsonImporter
         'students'=>['programs','students','student_academic_history'],
         'enrollment'=>['terms','sections','section_meetings','section_instructor_history','section_instructors'],
     ];
+    private const SOURCE_FILES = [
+        'auth'=>['auth/users.json'],
+        'students'=>['students/students.json','students/programs.json'],
+        'enrollment'=>['enrollment/enrollment.json'],
+    ];
 
     public function __construct(private readonly PDO $pdo, private readonly string $migrations) {}
 
     /** @return array{module:string,runtime:string,target:string,dry_run:bool} */
-    public static function parseArguments(array $argv): array
+    public static function parseArguments(array $argv, ?string $envFile = null): array
     {
         $options = [];
         foreach (array_slice($argv, 1) as $arg) {
@@ -50,12 +55,31 @@ final class JsonImporter
         if (!array_key_exists($options['module'], self::TABLES) || $options['target'] !== 'ais_test') {
             throw new ImportRefused('Target or module refused.');
         }
+        if (preg_match('~\A[\\\\/]{2}~', $options['runtime'])) {
+            throw new ImportRefused('Runtime refused.');
+        }
         $runtime = realpath($options['runtime']);
         $absolutePath = '~\A(?:[A-Za-z]:)?[\x2F\x5C]~';
         if ($runtime === false || !is_dir($runtime)
             || !preg_match($absolutePath, $options['runtime']) || !preg_match($absolutePath, $runtime)) {
             throw new ImportRefused('Runtime refused.');
         }
+        $forbidden = ['C:/ais-runtime', dirname(__DIR__, 2) . '/storage/runtime'];
+        $envFile ??= dirname(__DIR__, 2) . '/.env';
+        if (is_file($envFile)) {
+            $lines = @file($envFile, FILE_IGNORE_NEW_LINES);
+            if ($lines === false) { throw new ImportRefused('Runtime refused.'); }
+            foreach ($lines as $line) {
+                if (preg_match('/\A\s*APP_RUNTIME_PATH\s*=\s*(.*?)\s*\z/D', $line, $match)) {
+                    $forbidden[] = trim($match[1], "\"'");
+                }
+            }
+        }
+        foreach ($forbidden as $path) {
+            $resolved = realpath($path);
+            if ($resolved !== false && $resolved === $runtime) { throw new ImportRefused('Runtime refused.'); }
+        }
+        self::assertSourceFiles($options['module'], $runtime);
         return ['module'=>$options['module'], 'runtime'=>$runtime, 'target'=>$options['target'],
             'dry_run'=>$options['dry_run'] ?? false];
     }
@@ -74,12 +98,16 @@ final class JsonImporter
     /** @return array<string,int> */
     public function import(array $options): array
     {
+        self::assertSourceFiles($options['module'], $options['runtime']);
         $this->assertLiveTarget();
         $this->assertSchema();
         $module = $options['module'];
         $runtime = $options['runtime'];
-        $this->validateSource($module, $runtime);
+        $hashes = self::sourceHashes($module, $runtime);
         $raw = $this->rawSource($module, $runtime);
+        $snapshot = self::snapshotRuntime($module, $raw);
+        try {
+        $this->validateSource($module, $snapshot, $raw);
         $this->assertCleanTarget();
         $this->pdo->beginTransaction();
         try {
@@ -97,9 +125,12 @@ final class JsonImporter
                     throw new RuntimeException('Import count mismatch.');
                 }
             }
-            $this->assertEquivalent($module, $runtime, $raw);
+            $this->assertEquivalent($module, $snapshot, $raw);
             $checks = (new IntegrityVerifier($this->pdo))->verify();
             foreach ($checks as $ids) { if ($ids !== []) { throw new RuntimeException('Import integrity check failed.'); } }
+            if (self::sourceHashes($module, $runtime) !== $hashes) {
+                throw new RuntimeException('Source changed during import.');
+            }
             if ($options['dry_run']) { $this->pdo->rollBack(); }
             else { $this->pdo->commit(); }
             return $counts;
@@ -107,6 +138,62 @@ final class JsonImporter
             if ($this->pdo->inTransaction()) { $this->pdo->rollBack(); }
             throw $error;
         }
+        } finally { self::removeSnapshot($snapshot); }
+    }
+
+    private static function assertSourceFiles(string $module, string $runtime): void
+    {
+        foreach (self::SOURCE_FILES[$module] as $file) {
+            if (!is_file($runtime . '/' . $file) || !is_file($runtime . '/' . $file . '.lock')) {
+                throw new ImportRefused('Runtime refused.');
+            }
+        }
+    }
+
+    private static function sourceHashes(string $module, string $runtime): array
+    {
+        $hashes = [];
+        foreach (self::SOURCE_FILES[$module] as $file) {
+            $lock = @fopen($runtime . '/' . $file . '.lock', 'rb');
+            if ($lock === false) { throw new RuntimeException('Unable to hash source.'); }
+            try {
+                if (!flock($lock, LOCK_SH)) { throw new RuntimeException('Unable to hash source.'); }
+                $hash = @hash_file('sha256', $runtime . '/' . $file);
+                if ($hash === false) { throw new RuntimeException('Unable to hash source.'); }
+                $hashes[$file] = $hash;
+            } finally { flock($lock, LOCK_UN); fclose($lock); }
+        }
+        return $hashes;
+    }
+
+    private static function snapshotRuntime(string $module, array $raw): string
+    {
+        $root = sys_get_temp_dir() . '/ais-import-' . bin2hex(random_bytes(12));
+        if (!mkdir($root, 0700)) { throw new RuntimeException('Unable to create snapshot.'); }
+        try {
+            foreach (self::SOURCE_FILES[$module] as $file) {
+                $directory = $root . '/' . dirname($file);
+                if (!is_dir($directory) && !mkdir($directory, 0700)) { throw new RuntimeException('Unable to create snapshot.'); }
+                $data = $module === 'students' ? $raw[basename($file, '.json')] : $raw;
+                if (file_put_contents($root . '/' . $file, json_encode($data, JSON_THROW_ON_ERROR)) === false
+                    || file_put_contents($root . '/' . $file . '.lock', '') === false) {
+                    throw new RuntimeException('Unable to create snapshot.');
+                }
+            }
+            return $root;
+        } catch (Throwable $error) { self::removeSnapshot($root); throw $error; }
+    }
+
+    private static function removeSnapshot(string $root): void
+    {
+        $directories = [];
+        foreach (self::SOURCE_FILES as $files) foreach ($files as $file) {
+            if (is_file($root . '/' . $file)) { unlink($root . '/' . $file); }
+            if (is_file($root . '/' . $file . '.lock')) { unlink($root . '/' . $file . '.lock'); }
+            $directories[$root . '/' . dirname($file)] = true;
+        }
+        foreach (array_keys($directories) as $directory) { if (is_dir($directory)) { rmdir($directory); } }
+        if (is_dir($root)) { rmdir($root); }
     }
 
     private function assertLiveTarget(): void
@@ -166,7 +253,7 @@ final class JsonImporter
         }
     }
 
-    private function validateSource(string $module, string $runtime): void
+    private function validateSource(string $module, string $runtime, array $raw): void
     {
         if ($module === 'auth') {
             $mock = new MockUserRepository(new JsonStore($runtime . '/auth/users.json'));
@@ -178,17 +265,31 @@ final class JsonImporter
         } else {
             (new MockCatalogRepository(new JsonStore($runtime . '/enrollment/enrollment.json')))->terms();
         }
-        $this->validateRaw($module, $this->rawSource($module, $runtime));
+        $this->validateRaw($module, $raw);
     }
 
     private function rawSource(string $module, string $runtime): array
     {
         return match ($module) {
-            'auth'=>(new JsonStore($runtime . '/auth/users.json'))->read(),
-            'students'=>['students'=>(new JsonStore($runtime . '/students/students.json'))->read(),
-                'programs'=>(new JsonStore($runtime . '/students/programs.json'))->read()],
-            'enrollment'=>(new JsonStore($runtime . '/enrollment/enrollment.json'))->read(),
+            'auth'=>self::readSourceFile($runtime . '/auth/users.json'),
+            'students'=>['students'=>self::readSourceFile($runtime . '/students/students.json'),
+                'programs'=>self::readSourceFile($runtime . '/students/programs.json')],
+            'enrollment'=>self::readSourceFile($runtime . '/enrollment/enrollment.json'),
         };
+    }
+
+    private static function readSourceFile(string $path): array
+    {
+        $lock = @fopen($path . '.lock', 'rb');
+        if ($lock === false) { throw new RuntimeException('Unable to read source.'); }
+        try {
+            if (!flock($lock, LOCK_SH)) { throw new RuntimeException('Unable to read source.'); }
+            $contents = @file_get_contents($path);
+            if ($contents === false) { throw new RuntimeException('Unable to read source.'); }
+            $data = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($data)) { throw new RuntimeException('Invalid source.'); }
+            return $data;
+        } finally { flock($lock, LOCK_UN); fclose($lock); }
     }
 
     private function validateRaw(string $module, array $data): void
@@ -346,6 +447,13 @@ final class JsonImporter
     private function assertEquivalent(string $module, string $runtime, array $raw): void
     {
         if ($module === 'auth') {
+            $passwords = $this->pdo->query('SELECT id, password_hash FROM users ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
+            $passwords = array_map(static fn (array $row): array =>
+                ['id'=>(int)$row['id'], 'password_hash'=>$row['password_hash']], $passwords);
+            $expectedPasswords = array_map(static fn (array $row): array =>
+                ['id'=>$row['id'], 'password_hash'=>$row['password_hash']], $raw['users'] ?? []);
+            usort($expectedPasswords, static fn (array $a, array $b): int => $a['id'] <=> $b['id']);
+            self::same($expectedPasswords, $passwords);
             $mock = new MockUserRepository(new JsonStore($runtime . '/auth/users.json'));
             $sql = new MySQLUserRepository($this->pdo);
             foreach ($raw['users'] ?? [] as $row) {
@@ -378,7 +486,8 @@ final class JsonImporter
             $ids = array_column($raw['sections'] ?? [], 'id');
             foreach ($ids as $id) { self::same($mock->findSection($id)?->toArray(),$sql->findSection($id)?->toArray()); }
             self::same($mock->assignedFacultyIds($ids),$sql->assignedFacultyIds($ids));
-            $facultyIds = array_unique(array_column($raw['assignments'] ?? [],'faculty_id'));
+            $facultyIds = array_unique(array_merge(array_column($raw['assignments'] ?? [],'faculty_id'),
+                array_column($raw['assignment_history'] ?? [],'faculty_id')));
             foreach ($facultyIds as $id) { self::same($mock->sectionIdsForFaculty($id),$sql->sectionIdsForFaculty($id)); }
         }
     }
