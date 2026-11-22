@@ -4,6 +4,83 @@ Add the newest handoff at the top. A handoff is a request. It doesn't mean the r
 
 ---
 
+## T-60 Phase 7.1 → CODEX: wiring tests, fail-closed tests, HTTP harness switch, N1 (prepared by Claude, 2026-11-22) — ASSIGNED, not confirmed
+
+**Authorization:** owner, 2026-11-22, test-only wiring. The owner's decisions:
+- OQ-A: connect at startup (test-only), with accurate docs.
+- OQ-B: no per-request schema check.
+- **OQ-C approved:** an optional switch in `tests/Auth/HttpSupport.php`, with behaviour unchanged when off and no unrelated auth changes.
+- OQ-D: Claude's Apache probe (done).
+- OQ-E: 10 s lock wait (done).
+- OQ-F: strict test-only gate (done).
+- OQ-G: T-30 rule as a configuration check (done).
+- **OQ-H: Codex fixes N1.**
+- OQ-I: seeders unchanged.
+- **Mock-only HTTP exceptions:** each one listed by exact test name, with why it can't run on MySQL and what MySQL-equivalent coverage exists. **No silent skips, no weakened assertions.** The final list needs the owner's approval at G2.
+- **A fresh, isolated runtime directory for EVERY MySQL HTTP test run**, so no session or file state is reused across repository configurations.
+
+**Not authorized:** MySQL in the running app, live data import, faculty, enrollments or grades, merge, push, cutover.
+
+**Claude's part (done, `3f00830`):**
+- `app/bootstrap.php`: per-module selection, the test-only gate, one shared PDO, no fallback, the T-30 rule.
+- `Database::SESSION_INIT` lock wait.
+- `tests/Core/ConfigTest.php` W1–W5.
+- The `tests/Core/apache_check.php` probe.
+- Docs.
+
+**Don't edit those files.**
+
+**Branch and worktree:** `task/T-60-impl` in `..\AIS_CODEX_T60`, fast-forwarded to this commit. No git writes by Codex.
+
+### Files you may create or edit (and nothing else)
+- `tests/Database/WiringMySQLTest.php` (new): V11
+- `tests/Database/FailClosedMySQLTest.php` (new): V9
+- `tests/Auth/HttpSupport.php`: **only** the optional MySQL switch (OQ-C); default behaviour byte-for-byte the same when off
+- `tests/Database/HttpOnMySQLTest.php` (new, optional): the runner that re-runs the existing HTTP suites on MySQL through the switch, if that's cleaner than editing the harness alone
+- N1: `tests/Database/ImportOfflineTest.php` and `tests/Database/ImportMySQLTest.php` (test-only fix; no change to `database/tools/*` unless a test proves it necessary, and then stop and report)
+- `ai-coordination/T60_IMPLEMENTATION_REPORT.md` (append): include the **mock-only exception list**
+
+### Requirements
+- **V11, `WiringMySQLTest`:** for each combination C1 (auth), C2 (auth+students), C3 (auth+enrollment) and C4 (all three; faculty always mock), run the real `public/router.php` through `php -S` with a **fresh temp `APP_RUNTIME_PATH` per run**, `APP_ENV=testing`, `DB_USERNAME=ais_test_app` and the app password from `AIS_MYSQL_TEST_APP_PASSWORD`.
+  - **Setup:** a guarded reset and migrations, with the tester-seeded users (and programs) the flow needs. Use `JsonImporter` or tester inserts; never the app account for setup.
+  - **Assertions:**
+    - login works;
+    - a guarded read works;
+    - one audited write per MySQL module lands in `ais_test` (checked as the tester);
+    - **the module's JSON store file is never created** (no fallback);
+    - modules on mock still write their JSON;
+    - `sessions/`, `login-attempts.json` and `security-events.json` are still written to files;
+    - **one PDO shared by all the MySQL adapters** in the container (in-process bootstrap check);
+    - deactivating a user bumps `auth_version`, and that user's other session gets 401;
+    - an instructor assign gets 422 and writes nothing (Unavailable lookup).
+  - Run each combination ≥ 3 rounds.
+- **V9, `FailClosedMySQLTest`:**
+  - Model-invalid rows injected by the tester (an unknown hash algorithm, a timestamp that doesn't round-trip, a bad meeting) → a generic 500 with no SQL, host or user in the body.
+  - A wrong app password, and a closed port → a generic 500.
+  - The OQ-A outage behaviour as documented in `docs/database/SECURITY.md` §5: every request gets 500, and anonymous refusals aren't security-logged during an outage.
+  - No fallback: the module's JSON file is never created.
+- **OQ-C harness switch:**
+  - Opt in through an explicit env var, for example `AIS_HTTP_MYSQL=C1|C2|C3|C4`, honoured only when `MySQLTestSupport::enabled()` and the app password are present.
+  - The existing HTTP suites must re-run unchanged, with data seeded as today and then imported into a freshly reset and migrated `ais_test` (tester, `JsonImporter`).
+  - Every server start must get a **fresh runtime dir**, enforced in the harness: refuse to reuse a dir that already has sessions or stores.
+  - With the switch off, the harness must behave exactly as before; the offline suite count must stay the same.
+- **Mock-only list:** run the HTTP suites per combination, then record **every** failing test by exact name, with the reason (for example it reads or corrupts raw JSON stores, or seeds after the server starts) and its MySQL-equivalent coverage. **Don't skip silently**: either it runs on MySQL, or it appears in the list. Don't weaken any assertion.
+- **N1:**
+  - In `ImportOfflineTest.php`, the database/host mismatch tests and the root and `ais_test_app` migration-account tests must seed the source files (for example `phase8OfflineFiles($runtime,'auth')`), so they reach `assertOfflineTarget`, and assert the **exact** stderr message ("Target or migration account refused.").
+  - In `ImportMySQLTest.php`, assert the exact stderr message in the exit-2 refusal tests.
+  - Make sure each test now fails if the guard it targets is removed (mutation, scratch copy).
+- **Mutations** (scratch copy outside every worktree; report results):
+  - WM1: bind `MockUserRepository` when auth is on mysql → V11 fails (JSON created).
+  - WM2: a second `Database::connect` per adapter → the V11 shared-PDO check fails.
+  - WM3: drop the faculty clause from the gate → `ConfigTest` W2 fails.
+  - WM4: catch the connect failure and fall back → W4/V9 fail.
+  - WM5: connect before the gate → W3 fails.
+  - Plus N1: remove `assertOfflineTarget`'s checks → the N1 tests fail.
+- **Online tests** register only when `MySQLTestSupport::enabled()` and `AIS_MYSQL_TEST_APP_PASSWORD` is set. Use the guarded reset only; `ais_test` only; never print credentials.
+- **MariaDB is unreachable from the Codex sandbox:** write the online tests and report them NOT RUN. Claude runs them. Run the offline suite (223 must still pass) and `php -l`.
+
+---
+
 ## T-60 Phase 8 → CODEX: `verify.php` + `import_json.php` (prepared by Claude, 2026-11-21) — ASSIGNED, not confirmed
 
 **Authorization:** owner, 2026-11-21. **Tooling only**, against `ais_test` only.
