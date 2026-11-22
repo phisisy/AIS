@@ -97,18 +97,107 @@ test('Per-module repository overrides inherit the default, fail closed, and keep
     }
 });
 
-test('Any module on MySQL keeps the application failing closed until T-60 wiring exists', function (): void {
+test('T-60 7.1 W1: a MySQL module outside APP_ENV=testing is refused before any connection or runtime write', function (): void {
     $directory = tempDirectory();
-    $previous = [getenv('APP_REPOSITORY_AUTH'), getenv('APP_RUNTIME_PATH')];
+    $names = ['APP_ENV', 'APP_REPOSITORY_AUTH', 'APP_RUNTIME_PATH', 'DB_DATABASE', 'DB_USERNAME', 'DB_HOST', 'DB_PORT'];
+    $previous = array_combine($names, array_map('getenv', $names));
     try {
-        putenv('APP_REPOSITORY_AUTH=mysql');
-        putenv('APP_RUNTIME_PATH=' . $directory);
+        // Even a fully valid test target is refused when the environment is not "testing".
+        foreach (['APP_ENV' => 'development', 'APP_REPOSITORY_AUTH' => 'mysql', 'APP_RUNTIME_PATH' => $directory,
+            'DB_DATABASE' => 'ais_test', 'DB_USERNAME' => 'ais_test_app', 'DB_HOST' => '127.0.0.1', 'DB_PORT' => '1'] as $k => $v) {
+            putenv($k . '=' . $v);
+        }
         $error = throws(RuntimeException::class, static function (): void { require dirname(__DIR__, 2) . '/app/bootstrap.php'; });
         same('MySQL repositories are not available yet.', $error->getMessage());
         same([], array_values(array_diff(scandir($directory), ['.', '..'])));
     } finally {
-        putenv($previous[0] === false ? 'APP_REPOSITORY_AUTH' : 'APP_REPOSITORY_AUTH=' . $previous[0]);
-        putenv($previous[1] === false ? 'APP_RUNTIME_PATH' : 'APP_RUNTIME_PATH=' . $previous[1]);
+        foreach ($previous as $k => $v) { putenv($v === false ? $k : $k . '=' . $v); }
+        removeTestDirectory($directory);
+    }
+});
+
+test('T-60 7.1 W2/W3: the test-only gate refuses faculty on MySQL and every non-test target before connecting', function (): void {
+    $directory = tempDirectory();
+    $names = ['APP_ENV', 'APP_REPOSITORY', 'APP_REPOSITORY_AUTH', 'APP_REPOSITORY_STUDENTS', 'APP_REPOSITORY_ENROLLMENT',
+        'APP_REPOSITORY_FACULTY', 'APP_RUNTIME_PATH', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD', 'DB_HOST', 'DB_PORT'];
+    $previous = array_combine($names, array_map('getenv', $names));
+    // Port 1 is closed: if the gate ever let a case through, the result would be "Database connection failed."
+    $base = ['APP_ENV' => 'testing', 'APP_RUNTIME_PATH' => $directory, 'DB_DATABASE' => 'ais_test',
+        'DB_USERNAME' => 'ais_test_app', 'DB_PASSWORD' => 'unused', 'DB_HOST' => '127.0.0.1', 'DB_PORT' => '1'];
+    $run = static function (array $env) use ($names, $base): string {
+        foreach ($names as $n) { putenv($n); }
+        foreach (array_replace($base, $env) as $k => $v) { putenv($k . '=' . $v); }
+        return throws(RuntimeException::class, static function (): void { require dirname(__DIR__, 2) . '/app/bootstrap.php'; })->getMessage();
+    };
+    try {
+        $refused = 'MySQL repositories are not available yet.';
+        // W2: plain APP_REPOSITORY=mysql puts faculty on MySQL too, which stays refused until T-30.
+        same($refused, $run(['APP_REPOSITORY' => 'mysql']));
+        same($refused, $run(['APP_REPOSITORY_AUTH' => 'mysql', 'APP_REPOSITORY_FACULTY' => 'mysql']));
+        // ...while the same request with faculty kept on mock passes the gate (and only then tries to connect).
+        same('Database connection failed.', $run(['APP_REPOSITORY' => 'mysql', 'APP_REPOSITORY_FACULTY' => 'mock']));
+        // W3: every non-test target is refused before any connection attempt.
+        foreach ([['DB_DATABASE' => 'ais'], ['DB_DATABASE' => 'AIS_TEST'], ['DB_USERNAME' => 'ais_app'], ['DB_USERNAME' => 'ais_tester'],
+                  ['DB_USERNAME' => 'root'], ['DB_HOST' => 'db.example.test'], ['DB_HOST' => '10.0.0.5']] as $change) {
+            same($refused, $run(['APP_REPOSITORY_AUTH' => 'mysql'] + $change));
+        }
+        same([], array_values(array_diff(scandir($directory), ['.', '..'])));
+    } finally {
+        foreach ($previous as $k => $v) { putenv($v === false ? $k : $k . '=' . $v); }
+        removeTestDirectory($directory);
+    }
+});
+
+test('T-60 7.1 W4: a database outage behind the satisfied gate is a generic, unchained failure and a generic HTTP 500', function (): void {
+    $directory = tempDirectory();
+    $names = ['APP_ENV', 'APP_REPOSITORY_AUTH', 'APP_RUNTIME_PATH', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD', 'DB_HOST', 'DB_PORT'];
+    $previous = array_combine($names, array_map('getenv', $names));
+    $env = ['APP_ENV' => 'testing', 'APP_REPOSITORY_AUTH' => 'mysql', 'APP_RUNTIME_PATH' => $directory,
+        'DB_DATABASE' => 'ais_test', 'DB_USERNAME' => 'ais_test_app', 'DB_PASSWORD' => 'w4-secret-value',
+        'DB_HOST' => '127.0.0.1', 'DB_PORT' => '1'];
+    $server = null;
+    try {
+        foreach ($env as $k => $v) { putenv($k . '=' . $v); }
+        $error = throws(RuntimeException::class, static function (): void { require dirname(__DIR__, 2) . '/app/bootstrap.php'; });
+        same('Database connection failed.', $error->getMessage());
+        same(null, $error->getPrevious());
+        same([], array_values(array_diff(scandir($directory), ['.', '..'])));
+        $server = new CoreHttpServer($env);
+        [$status, , $body] = $server->request('GET', '/');
+        same(500, $status);
+        same('An internal error occurred.', json_decode($body)->message);
+        foreach (['127.0.0.1', 'ais_test', 'ais_test_app', 'w4-secret-value', 'SQLSTATE', 'PDO'] as $leak) {
+            check(!str_contains($body, $leak), 'Outage response must not reveal connection details.');
+        }
+    } finally {
+        $server?->close();
+        foreach ($previous as $k => $v) { putenv($v === false ? $k : $k . '=' . $v); }
+        removeTestDirectory($directory);
+    }
+});
+
+test('T-60 7.1 W5: the default configuration binds only JSON repositories, opens no connection, and bootstrap never reads migration credentials', function (): void {
+    $directory = tempDirectory();
+    $names = ['APP_ENV', 'APP_REPOSITORY', 'APP_REPOSITORY_AUTH', 'APP_REPOSITORY_STUDENTS', 'APP_REPOSITORY_ENROLLMENT',
+        'APP_REPOSITORY_FACULTY', 'APP_RUNTIME_PATH', 'DB_PORT'];
+    $previous = array_combine($names, array_map('getenv', $names));
+    try {
+        foreach ($names as $n) { putenv($n); }
+        putenv('APP_RUNTIME_PATH=' . $directory);
+        putenv('DB_PORT=1'); // a connection attempt would fail loudly; none must happen
+        $container = require dirname(__DIR__, 2) . '/app/bootstrap.php';
+        same(App\Auth\Repositories\MockUserRepository::class, get_class($container['users']));
+        same(App\Students\Repositories\JsonProgramCatalog::class, get_class($container['programs']));
+        same(App\Students\Repositories\MockStudentRepository::class, get_class($container['students']));
+        same(App\Enrollment\Repositories\MockCatalogRepository::class, get_class($container['enrollment_catalog']));
+        same(App\Enrollment\Contracts\UnavailableFacultyIdentity::class, get_class($container['faculty_identity']));
+        $source = file_get_contents(dirname(__DIR__, 2) . '/app/bootstrap.php');
+        foreach (['DB_MIGRATION_', 'ATTR_PERSISTENT', 'catch'] as $forbidden) {
+            check(!str_contains($source, $forbidden), 'Bootstrap must not contain ' . $forbidden . '.');
+        }
+        same(1, substr_count($source, 'Database::connect('));
+    } finally {
+        foreach ($previous as $k => $v) { putenv($v === false ? $k : $k . '=' . $v); }
         removeTestDirectory($directory);
     }
 });

@@ -9,9 +9,9 @@ use RuntimeException;
 
 final class Database
 {
-    /** T-60 OQ-6: every app, migration and test connection runs strict and in UTC, whatever my.ini says. */
+    /** T-60 OQ-6: strict, UTC; 7.1 OQ-E: 10 s lock wait (below Apache/PHP time limits) on every connection. */
     public const SESSION_INIT = "SET SESSION sql_mode='STRICT_ALL_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,"
-        . "ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION', time_zone='+00:00'";
+        . "ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION', time_zone='+00:00', innodb_lock_wait_timeout=10";
 
     /** Create a connection only when explicitly requested by a repository. */
     public static function connect(array $config): PDO

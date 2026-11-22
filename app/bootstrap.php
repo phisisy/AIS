@@ -8,9 +8,11 @@ use App\Auth\Middleware\RouteGuard;
 use App\Auth\Services\AuthorizationService;
 use App\Auth\Services\SecurityEventLog;
 use App\Auth\Repositories\MockUserRepository;
+use App\Auth\Repositories\MySQLUserRepository;
 use App\Auth\Services\AuthService;
 use App\Auth\Services\LoginRateLimiter;
 use App\Auth\Session;
+use App\Core\Database;
 use App\Core\Environment;
 use App\Core\JsonStore;
 use App\Core\Response;
@@ -20,6 +22,7 @@ use App\Enrollment\Controllers\TermController;
 use App\Enrollment\Controllers\SectionController;
 use App\Enrollment\Contracts\UnavailableFacultyIdentity;
 use App\Enrollment\Repositories\MockCatalogRepository;
+use App\Enrollment\Repositories\MySQLCatalogRepository;
 use App\Enrollment\Services\TermService;
 use App\Enrollment\Services\SectionService;
 use App\Enrollment\Services\RepositorySectionDirectory;
@@ -31,6 +34,8 @@ use App\Students\Services\RepositoryStudentDirectory;
 use App\Students\Controllers\StudentController;
 use App\Students\Repositories\JsonProgramCatalog;
 use App\Students\Repositories\MockStudentRepository;
+use App\Students\Repositories\MySQLProgramCatalog;
+use App\Students\Repositories\MySQLStudentRepository;
 use App\Students\Services\StudentNumberPolicy;
 use App\Students\Services\StudentService;
 
@@ -45,16 +50,33 @@ $container = [
 ];
 $container['router']->add('GET', '/', static fn (): Response => Response::success([], 'AIS API is running.'));
 
-// Team 2 — Auth (T-01). MySQL repositories arrive with T-40; until then mysql mode fails closed.
-if (in_array('mysql', $container['config']['repositories'], true)) {
-    throw new RuntimeException('MySQL repositories are not available yet.');
+// T-60 Phase 7.1: per-module repository selection. JSON (mock) is the default. MySQL never falls back
+// to mock: any failure is a generic 500. One shared PDO per request, opened only when a module is on MySQL.
+$repositories = $container['config']['repositories'];
+$pdo = null;
+if (in_array('mysql', $repositories, true)) {
+    $db = $container['database_config'];
+    // shortcut: test-only gate (owner OQ-F; no live activation) until the G4 cutover runbook replaces it.
+    // Faculty stays on mock until T-30 is merged. The gate runs before the runtime directory is touched.
+    if ($repositories['faculty'] === 'mysql' || $container['config']['environment'] !== 'testing'
+        || $db['database'] !== 'ais_test' || $db['username'] !== 'ais_test_app'
+        || !in_array($db['host'], ['127.0.0.1', 'localhost', '::1'], true)) {
+        throw new RuntimeException('MySQL repositories are not available yet.');
+    }
+    $pdo = Database::connect($db);
+    $live = $pdo->query('SELECT DATABASE() AS db_name, CURRENT_USER() AS account')->fetch();
+    if (!is_array($live) || $live['db_name'] !== 'ais_test' || !str_starts_with((string) $live['account'], 'ais_test_app@')) {
+        throw new RuntimeException('MySQL repositories are not available yet.');
+    }
 }
 $runtime = RuntimeDirectory::prepare($container['config']['runtime_path'], dirname(__DIR__) . '/public');
 $container['session'] = new Session(
     $runtime,
     $container['config']['https'] || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
 );
-$container['users'] = new MockUserRepository(new JsonStore($runtime . '/auth/users.json'));
+$container['users'] = $repositories['auth'] === 'mysql'
+    ? new MySQLUserRepository($pdo)
+    : new MockUserRepository(new JsonStore($runtime . '/auth/users.json'));
 $limiter = new LoginRateLimiter(new JsonStore($runtime . '/auth/login-attempts.json'));
 $container['auth'] = new AuthService($container['users'], $container['session'], $limiter);
 // Team 2 — RBAC (T-02). Modules protect routes with $container['guard']->roles([...], $handler).
@@ -76,9 +98,14 @@ $container['user_controller'] = new UserController(
 );
 // Team 3 — student records (T-10). Faculty visibility denies everything until T-31 wires a
 // verified class-assignment source. An invalid STUDENT_NUMBER_PATTERN fails closed here.
-$container['programs'] = new JsonProgramCatalog(new JsonStore($runtime . '/students/programs.json'));
+// Programs and students switch together (programs is the students' FK parent).
+$container['programs'] = $repositories['students'] === 'mysql'
+    ? new MySQLProgramCatalog($pdo)
+    : new JsonProgramCatalog(new JsonStore($runtime . '/students/programs.json'));
 $container['student_visibility'] = new DenyAllFacultyVisibility();
-$container['students'] = new MockStudentRepository(new JsonStore($runtime . '/students/students.json'));
+$container['students'] = $repositories['students'] === 'mysql'
+    ? new MySQLStudentRepository($pdo)
+    : new MockStudentRepository(new JsonStore($runtime . '/students/students.json'));
 $container['student_controller'] = new StudentController(new StudentService(
     $container['students'],
     $container['programs'],
@@ -95,11 +122,19 @@ $container['academic_record_controller'] = new AcademicRecordController(new Acad
 ));
 $container['student_directory'] = new RepositoryStudentDirectory($container['students'], $container['users']);
 // Team 4: terms and sections (T-20). One store shares the lock; T-22 adds enrollments here.
-$container['enrollment_catalog'] = new MockCatalogRepository(new JsonStore($runtime . '/enrollment/enrollment.json'));
+$container['enrollment_catalog'] = $repositories['enrollment'] === 'mysql'
+    ? new MySQLCatalogRepository($pdo)
+    : new MockCatalogRepository(new JsonStore($runtime . '/enrollment/enrollment.json'));
 $container['term_controller'] = new TermController(new TermService($container['enrollment_catalog'], $container['authorization']));
 // Team 4: instructor assignments (T-21). Verifies nobody until T-30 binds Team 5's lookup (owner 2026-11-20).
 // Never bind a mock here or select one by config/env: mock lookups exist only under tests/.
 $container['faculty_identity'] = new UnavailableFacultyIdentity();
+// T-30 safety rule (owner OQ-G, configuration check only): with a real faculty lookup, assignment faculty ids
+// are FK-checked, so enrollment on MySQL then requires faculty on MySQL. Fails closed; inert until T-30.
+if ($repositories['enrollment'] === 'mysql' && $repositories['faculty'] !== 'mysql'
+    && !$container['faculty_identity'] instanceof UnavailableFacultyIdentity) {
+    throw new RuntimeException('Invalid repository configuration.');
+}
 $container['section_directory'] = new RepositorySectionDirectory($container['enrollment_catalog'], $container['faculty_identity']);
 $container['section_controller'] = new SectionController(new SectionService(
     $container['enrollment_catalog'], $container['authorization'], $container['faculty_identity']));

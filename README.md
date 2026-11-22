@@ -385,7 +385,14 @@ It will create fictional terms and sections only in an empty mock catalog.
 ## Database (Team 6, T-60) — in development, not active
 
 - **Design:** MariaDB/InnoDB, `utf8mb4_nopad_bin`, strict `sql_mode` and UTC on every connection. See `docs/plans/T-60-database-architecture.md` and `docs/database/`. Conditionally approved 2026-11-21.
-- **The application still uses the JSON repositories.** `APP_REPOSITORY` and `APP_REPOSITORY_AUTH|STUDENTS|ENROLLMENT|FACULTY` accept `mock|mysql`. A module on `mysql` needs auth on `mysql`. Any `mysql` setting still makes the app **fail closed** at startup until the MySQL wiring exists, and production cutover needs separate approval.
+- **The application still uses the JSON repositories by default.** `APP_REPOSITORY` and `APP_REPOSITORY_AUTH|STUDENTS|ENROLLMENT|FACULTY` accept `mock|mysql`, and a module on `mysql` needs auth on `mysql`.
+- **Phase 7.1: MySQL wiring is test-only.** Bootstrap selects the MySQL repository for auth, students (with programs) and enrollment (the T-20/T-21 catalog) only when `APP_ENV=testing`, `DB_DATABASE=ais_test`, `DB_USERNAME=ais_test_app` and a loopback `DB_HOST`. Anything else stops startup with "MySQL repositories are not available yet.".
+- **Faculty stays on mock until T-30.**
+- **One shared connection per request,** opened at startup.
+- **No fallback to JSON:** a database outage is a generic 500 on every request.
+- **File-based, whatever the backend:** sessions, login and re-authentication throttling, and security events.
+- **Production use needs the separate G4 cutover approval.**
+- **Seeders** (`database/seeders/*.php`) only check the global `APP_REPOSITORY`. With per-module `mysql` overrides they still write JSON files the app then doesn't read. Use `database/import_json.php` for MySQL test data.
 - **Test database:** only `ais_test` is used, by tests and CLI tools only, never by the running app. The owner sets up local MariaDB and the accounts (`docs/plans/T-60-database-architecture.md` §9, `docs/database/SECURITY.md` §1, §8).
 - **MariaDB version:** XAMPP's 10.4.32 is for development only. Production needs a supported release.
 - **`verify.php`** (Phase 8) checks cross-row integrity on demand. It runs before cutover, after imports and migrations, before backups, and whenever integrity is in doubt. It is not the same as the JSON mocks' check on every request.
