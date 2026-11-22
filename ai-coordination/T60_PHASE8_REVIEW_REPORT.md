@@ -40,3 +40,28 @@ One blocking finding (M1). No Critical or High findings.
 ## Resolution plan (Claude)
 
 Codex fixes M1, M2 and L1–L4 in one round, then an independent re-review of the corrected commit.
+
+## Review #2 (re-review of fixes) — VERDICT: APPROVE
+
+- **Reviewed:** exact commit `5114facf2f65a0a7d9f26bbaff2677ea7674b4c4`, merged as `f025f7d14825fc018ef23788e596900453a8dd14`. Same reviewer (static, read-only). 2026-11-22.
+- **Result:** no blocking security or data-integrity issue remains.
+
+| Prior | Status | Evidence (summary) |
+|---|---|---|
+| M1 | RESOLVED | `assertSourceFiles` (`is_file` on each `.json` and `.lock`) runs in `parseArguments`, before env loading and any DB connection, and again before the live-target check. Source reads open the existing `.lock` with `'rb'` and `LOCK_SH`, so nothing is created. Every `JsonStore` is built on a random temp **snapshot**, never the source. The snapshot is a faithful copy: both paths decode identically, so re-encoding hides nothing the mocks could see. Cleanup can't traverse paths. An offline test proves the directory listing is unchanged |
+| M2 | RESOLVED (residual N3) | `realpath` comparison against `C:/ais-runtime`, `<project>/storage/runtime` and every `.env`-file `APP_RUNTIME_PATH`. The parsing matches `Environment.php`; the process env is deliberately not consulted. The lead's Windows probe refused slash, case, trailing-separator, dot-segment and junction spellings |
+| L1 | RESOLVED (residual N2) | One read used for validation, inserts and equivalence. sha256 is taken under `LOCK_SH` before validation and again before COMMIT; a deleted file aborts |
+| L2 | RESOLVED | The UNC/`//` refusal runs before `realpath`, so the network is never touched; it also covers `\?\` and mixed separators, and refuses drive-relative paths |
+| L3 | PARTIAL (N1) | Trigger-based post-insert rollback, dependency/schema/dirty refusals, `verify.php` host/user/port refusals, V2 student/position/faculty cases, and E8 comparing roles, audit and the lock row all exist. Some older offline refusal tests became vacuous after M1 (N1) |
+| L4 | RESOLVED | Strict `password_hash` comparison against the raw source, never printed; faculty ids come from assignments and history |
+
+**New findings (none blocking):**
+
+| ID | Sev | Finding | Fix (owner) |
+|---|---|---|---|
+| N1 | Low | Offline refusal tests for `DB_DATABASE`/host mismatch and the root/`ais_test_app` migration account now stop earlier, at "Runtime refused." on an empty temp dir, so they pass whatever `assertOfflineTarget` does. The code itself is correct, and the live `CURRENT_USER()` check also refuses | Seed `phase8OfflineFiles($runtime,'auth')` and assert the exact stderr message. Assert the stderr message in the online exit-2 refusal tests too. **Recommended before any merge to main** (Codex) |
+| N2 | Low | A small window between the baseline hash and the data read (separate lock acquisitions); needs two writes from a running app, which the runbook already forbids | Hash `$contents` under the same lock as the read (Codex) |
+| N3 | Low | The live-runtime refusal compares only the root path. A sub-folder junction to `C:\ais-runtime\auth`, or a `subst` drive, could pass. Needs deliberate setup | `realpath` each source file and refuse it under any forbidden root (Codex) |
+| N4 | Info | The temporary snapshot copies `users.json`, including password hashes, into `%TEMP%`. It's left behind if the process is killed; Windows ignores `0700` | Document it, or sweep leftover `ais-import-*` folders at startup |
+
+**Not statically verifiable:** Windows `realpath` with `subst` and 8.3 short names; whether `LOCK_SH` on an `'rb'` handle blocks `LOCK_EX` writers on Windows; MariaDB behaviour, which the lead's online runs cover.
