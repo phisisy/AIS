@@ -28,7 +28,7 @@ All tasks inherit the security checklist in `ARCHITECTURE.md` §6.
 | T-32 | 5 | Grade entry, submission, finalization | T-31, B-05 | PROPOSED |
 | T-39 | All | Cross-module integration tests | T-32 | PROPOSED |
 | T-40 | 2–5 | MySQL repositories | B-03 → T-60 | Folded into T-60 Phases 6–7 (file list amended, OQ-14) |
-| T-60 | 6 | MariaDB foundation: schema, migrations, tools, MySQL adapters (ais_test only) | T-21 ✔ | IN_PROGRESS. Phases 5, 6a–6c verified. **Phase 7.2 done:** 18 concurrency/integrity tests (A1–A4, S1–S4, C1–C6, T1–T4) PASS; two full online runs 261/261; offline 211/211; 144 lint; no repository defects (`ai-coordination/T60_PHASE72_REPORT.md`). Awaiting owner authorization for the next phase. No wiring, no cutover, no merge |
+| T-60 | 6 | MariaDB foundation: schema, migrations, tools, MySQL adapters (ais_test only) | T-21 ✔ | Phases 5, 6a–6c, 7.2, **8 COMPLETE** (Phase 8 independent re-review APPROVE on `5114fac`; final report `T60_PHASE8_FINAL_REPORT.md`). Phase 7.1 readiness plan ready (`T60_PHASE71_READINESS_PLAN.md`); **7.1 implementation awaits owner G1**. Open: N1 (fix before main merge). No wiring, no cutover, no merge |
 
 Teams 3, 4 and 5 can run **in parallel only where their files don't overlap**. They do overlap on
 `app/bootstrap.php`, so bootstrap/route registration edits must happen one task at a time.
