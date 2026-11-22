@@ -339,12 +339,55 @@ if (phase8OnlineEnabled()) {
             same(0, (int) $owner->query('SELECT COUNT(*) FROM users')->fetchColumn());
             same(0, (int) $owner->query("SELECT last_seq FROM repository_locks WHERE name = 'auth'")->fetchColumn());
             same(0, phase8Import($runtime, 'auth')[0]);
-            $before = $owner->query('SELECT id, email, status, auth_version FROM users ORDER BY id')->fetchAll();
+            $before = [];
+            foreach (['users'=>'id', 'user_roles'=>'user_id, role', 'audit_logs'=>'id'] as $table => $order) {
+                $before[$table] = hash('sha256', serialize($owner->query('SELECT * FROM ' . $table . ' ORDER BY ' . $order)->fetchAll()));
+            }
+            $before['auth_lock'] = hash('sha256', serialize($owner->query("SELECT * FROM repository_locks WHERE name = 'auth'")->fetchAll()));
             same(2, phase8Import($runtime, 'auth')[0]);
-            same($before, $owner->query('SELECT id, email, status, auth_version FROM users ORDER BY id')->fetchAll());
+            foreach (['users'=>'id', 'user_roles'=>'user_id, role', 'audit_logs'=>'id'] as $table => $order) {
+                same($before[$table], hash('sha256', serialize($owner->query('SELECT * FROM ' . $table . ' ORDER BY ' . $order)->fetchAll())));
+            }
+            same($before['auth_lock'], hash('sha256', serialize($owner->query("SELECT * FROM repository_locks WHERE name = 'auth'")->fetchAll())));
             same($source, phase8SourceHashes($runtime));
         } finally {
             removeTestDirectory($runtime);
         }
+    });
+
+    test('Phase 8 E8: equivalence failure after inserts rolls back auth', static function (): void {
+        $owner = phase8FreshDatabase(); $runtime = phase8Runtime();
+        try {
+            check($owner->query('SELECT DATABASE()')->fetchColumn() === 'ais_test');
+            $owner->exec("CREATE TRIGGER ais_test.phase8_audit_change BEFORE INSERT ON ais_test.audit_logs "
+                . "FOR EACH ROW SET NEW.action = 'changed.by.test'");
+            same(1, phase8Import($runtime, 'auth')[0]);
+            foreach (['users', 'user_roles', 'audit_logs'] as $table) {
+                same(0, (int)$owner->query('SELECT COUNT(*) FROM ' . $table)->fetchColumn());
+            }
+            same(0, (int)$owner->query("SELECT last_seq FROM repository_locks WHERE name = 'auth'")->fetchColumn());
+        } finally {
+            check($owner->query('SELECT DATABASE()')->fetchColumn() === 'ais_test');
+            $owner->exec('DROP TRIGGER IF EXISTS ais_test.phase8_audit_change');
+            same(0, (int)$owner->query("SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'ais_test' "
+                . "AND TRIGGER_NAME = 'phase8_audit_change'")->fetchColumn());
+            removeTestDirectory($runtime);
+        }
+    });
+
+    test('Phase 8 refusals: dependency, schema and dirty target', static function (): void {
+        $owner = phase8FreshDatabase(); $runtime = phase8Runtime();
+        try {
+            same(2, phase8Import($runtime, 'students')[0]);
+            $version = (int)$owner->query('SELECT MAX(version) FROM schema_migrations')->fetchColumn();
+            $owner->prepare("UPDATE schema_migrations SET state = 'started' WHERE version = ?")->execute([$version]);
+            same(2, phase8Import($runtime, 'auth')[0]);
+        } finally { removeTestDirectory($runtime); }
+        $owner = phase8FreshDatabase(); $runtime = phase8Runtime();
+        try {
+            $owner->prepare('INSERT INTO users (id,email,status,password_hash,auth_version) VALUES (?,?,?,?,?)')
+                ->execute([99, 'dirty@example.test', 'active', password_hash('Fixture', PASSWORD_DEFAULT), 1]);
+            same(2, phase8Import($runtime, 'auth')[0]);
+        } finally { removeTestDirectory($runtime); }
     });
 }
