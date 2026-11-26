@@ -1,0 +1,13 @@
+﻿.env
+.env.*
+/storage/runtime/
+/runtime/
+/evidence/
+/database/demo_data.sql
+*.cnf
+*.pem
+*.key
+*.log
+*.dump
+*.bundle
+*passwords.txt

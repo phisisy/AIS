@@ -1,0 +1,9 @@
+Options -Indexes -MultiViews
+<IfModule php_module>
+    php_flag display_errors Off
+    php_flag display_startup_errors Off
+</IfModule>
+RewriteEngine On
+# Support an Apache alias/vhost pointed at the repository without exposing it.
+RewriteRule ^public/index\.php$ - [END]
+RewriteRule ^ public/index.php [END,QSA]

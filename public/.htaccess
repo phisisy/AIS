@@ -1,0 +1,9 @@
+Options -Indexes -MultiViews
+<IfModule php_module>
+    php_flag display_errors Off
+    php_flag display_startup_errors Off
+</IfModule>
+DirectoryIndex index.php
+RewriteEngine On
+RewriteRule ^index\.php$ - [END]
+RewriteRule ^ index.php [END,QSA]

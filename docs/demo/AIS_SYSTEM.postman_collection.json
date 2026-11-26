@@ -1,0 +1,1050 @@
+{
+  "info": {
+    "name": "AIS_SYSTEM demo (UNVERIFIED)",
+    "description": "UNVERIFIED — generated from unexecuted source at 8e4a0ed; run against a JSON-mode server first (see DEMO_GUIDE.md).\n\nRun the folders in order, once, against a server on a FRESH runtime (docs/DEMO_GUIDE.md section 2). Re-running on the same runtime gives 409 duplicates and wrong ids. Postman's cookie jar keeps the AIS_SESSION cookie; only one user is signed in at a time, and each 'Login as ...' replaces the previous session. Set passwords as CURRENT values only (never initial values) so they are not exported. Login limit: 5 attempts per IP+email and 30 per IP in 15 minutes; this collection logs in 9 times in total (admin 2, registrar 3, faculty 1, student 2, student2 1). Contract: docs/FRONTEND_API.md.\n\nGRADES: start the server with APP_GRADE_SCALE=demo (the demo-only scale 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 2.75, 3.00, 5.00, INC, DRP; NOT the official university policy). Folders 7 and 8 expect success in that mode. The collection variable grade_scale_mode (demo or off) only selects what the one OPTIONAL request in folder 7 asserts; it does not configure the server. With the default server (APP_GRADE_SCALE unset or off), grade entry and corrections return 409 grade_scale and folders 7-8 are expected to fail except that optional request.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// RouteGuard and AuthController read the header 'X-CSRF-Token' on every non-GET request (login and logout included).",
+          "if (pm.request.method !== 'GET') {",
+          "  pm.request.headers.upsert({ key: 'X-CSRF-Token', value: pm.collectionVariables.get('csrf') || '' });",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('JSON envelope with success flag', () => pm.expect(pm.response.json()).to.have.property('success'));"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000" },
+    { "key": "csrf", "value": "" },
+    { "key": "admin_email", "value": "admin@example.test" },
+    { "key": "admin_password", "value": "" },
+    { "key": "registrar_email", "value": "registrar@example.test" },
+    { "key": "registrar_password", "value": "" },
+    { "key": "faculty_email", "value": "faculty@example.test" },
+    { "key": "faculty_password", "value": "" },
+    { "key": "student_email", "value": "student@example.test" },
+    { "key": "student_password", "value": "" },
+    { "key": "student2_email", "value": "student2@example.test" },
+    { "key": "student2_password", "value": "" },
+    { "key": "faculty2_email", "value": "faculty2@example.test" },
+    { "key": "faculty2_password", "value": "" },
+    { "key": "registrar2_email", "value": "registrar2@example.test" },
+    { "key": "registrar2_password", "value": "" },
+    { "key": "registrar2_reset_password", "value": "" },
+    { "key": "admin2_email", "value": "admin2@example.test" },
+    { "key": "admin2_password", "value": "" },
+    { "key": "admin_user_id", "value": "" },
+    { "key": "faculty_user_id", "value": "" },
+    { "key": "student2_user_id", "value": "" },
+    { "key": "faculty2_user_id", "value": "" },
+    { "key": "registrar2_user_id", "value": "" },
+    { "key": "admin2_user_id", "value": "" },
+    { "key": "student_id", "value": "" },
+    { "key": "student2_id", "value": "" },
+    { "key": "faculty_id", "value": "" },
+    { "key": "faculty2_id", "value": "" },
+    { "key": "term_id", "value": "" },
+    { "key": "section_id", "value": "" },
+    { "key": "section2_id", "value": "" },
+    { "key": "section3_id", "value": "" },
+    { "key": "section4_id", "value": "" },
+    { "key": "enrollment_id", "value": "" },
+    { "key": "enrollment2_id", "value": "" },
+    { "key": "enrollment3_first_id", "value": "" },
+    { "key": "enrollment3_id", "value": "" },
+    { "key": "enrollment_student2_id", "value": "" },
+    { "key": "grade_scale_mode", "value": "demo" },
+    { "key": "grade_id", "value": "" },
+    { "key": "expected_seq", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0 Health & CSRF",
+      "item": [
+        {
+          "name": "Health check",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('API is running', () => pm.expect(pm.response.json().message).to.eql('AIS API is running.'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/", "description": "FRONTEND_API.md §1.1 Health. Unguarded. Expect 200." }
+        },
+        {
+          "name": "Get CSRF token",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.test('csrf_token is 64 hex chars', () => pm.expect(j.data.csrf_token).to.match(/^[a-f0-9]{64}$/));",
+            "pm.collectionVariables.set('csrf', j.data.csrf_token);"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/auth/csrf", "description": "FRONTEND_API.md §1.3, §3.1. Starts an anonymous session; stores data.csrf_token in {{csrf}}. Expect 200." }
+        }
+      ]
+    },
+    {
+      "name": "1 Admin",
+      "item": [
+        {
+          "name": "Login as admin",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "if (pm.response.code === 200) {",
+            "  pm.test('has admin role', () => pm.expect(j.data.user.roles).to.include('admin'));",
+            "  pm.collectionVariables.set('csrf', j.data.csrf_token); // login rotates the token",
+            "  pm.collectionVariables.set('admin_user_id', j.data.user.id);",
+            "}"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{admin_email}}\",\"password\":\"{{admin_password}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/auth/login", "description": "FRONTEND_API.md §3.1. CSRF required. Login rotates the session id and the CSRF token; the test stores the new token. Expect 200." }
+        },
+        {
+          "name": "Who am I (admin)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('email matches', () => pm.expect(pm.response.json().data.user.email).to.eql(pm.collectionVariables.get('admin_email')));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/auth/me", "description": "FRONTEND_API.md §3.1. Expect 200 {user}." }
+        },
+        {
+          "name": "Create student account (student2)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const j = pm.response.json();",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('student2_user_id', j.data.user.id); }",
+            "pm.test('no password hash in response', () => pm.expect(pm.response.text()).to.not.include('password'));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{student2_email}}\",\"password\":\"{{student2_password}}\",\"roles\":[\"student\"],\"status\":\"active\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/admin/users", "description": "FRONTEND_API.md §3.2. Password 12-72 bytes (set {{student2_password}} first). Expect 201 'Account created.'" }
+        },
+        {
+          "name": "Create faculty account (faculty2, second faculty)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('faculty2_user_id', pm.response.json().data.user.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{faculty2_email}}\",\"password\":\"{{faculty2_password}}\",\"roles\":[\"faculty\"],\"status\":\"active\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/admin/users", "description": "FRONTEND_API.md §3.2. Expect 201." }
+        },
+        {
+          "name": "Create registrar account (registrar2)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('registrar2_user_id', pm.response.json().data.user.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{registrar2_email}}\",\"password\":\"{{registrar2_password}}\",\"roles\":[\"registrar\"],\"status\":\"active\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/admin/users", "description": "FRONTEND_API.md §3.2. Used below for the role, status and password-reset demos. Expect 201." }
+        },
+        {
+          "name": "Create admin account (admin2)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('admin2_user_id', pm.response.json().data.user.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{admin2_email}}\",\"password\":\"{{admin2_password}}\",\"roles\":[\"admin\"],\"status\":\"active\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/admin/users", "description": "FRONTEND_API.md §3.2. Expect 201. Fictional demo account; deactivate it after the demo." }
+        },
+        {
+          "name": "Refusal: duplicate email (409)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('errors.email', () => pm.expect(pm.response.json().errors).to.have.property('email'));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{student2_email}}\",\"password\":\"{{student2_password}}\",\"roles\":[\"student\"]}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/admin/users", "description": "FRONTEND_API.md §3.2. Duplicate email (any case). Expect 409 errors.email; audited as a denied entry." }
+        },
+        {
+          "name": "List users",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.test('8 demo accounts (4 seeded + 4 created)', () => pm.expect(j.data.pagination.total).to.be.at.least(8));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/admin/users?search=example.test&per_page=50", "description": "FRONTEND_API.md §3.2 (paged, email substring search). Expect 200 {users, pagination}." }
+        },
+        {
+          "name": "Find seeded faculty account",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const u = pm.response.json().data.users.find(x => x.email === pm.collectionVariables.get('faculty_email'));",
+            "pm.test('faculty@example.test found', () => pm.expect(u).to.be.an('object'));",
+            "if (u) { pm.collectionVariables.set('faculty_user_id', u.id); }"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/admin/users?search={{faculty_email}}", "description": "FRONTEND_API.md §3.2. Captures the account id of the seeded faculty user (needed for its faculty profile; there is no faculty seeder). Expect 200." }
+        },
+        {
+          "name": "Show user (registrar2)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('email', () => pm.expect(pm.response.json().data.user.email).to.eql(pm.collectionVariables.get('registrar2_email')));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/admin/users/{{registrar2_user_id}}", "description": "FRONTEND_API.md §3.2. Expect 200 {user}." }
+        },
+        {
+          "name": "Change roles (registrar2 -> registrar + faculty)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('roles updated', () => pm.expect(pm.response.json().data.user.roles).to.include.members(['registrar', 'faculty']));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"roles\":[\"registrar\",\"faculty\"]}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/admin/users/{{registrar2_user_id}}", "description": "FRONTEND_API.md §3.2. roles is the FULL new set. Expect 200 'Account updated.'; audit action user.updated." }
+        },
+        {
+          "name": "Deactivate account (registrar2)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('inactive', () => pm.expect(pm.response.json().data.user.status).to.eql('inactive'));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"status\":\"inactive\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/admin/users/{{registrar2_user_id}}/status", "description": "FRONTEND_API.md §3.2. Expect 200; audit action user.deactivated." }
+        },
+        {
+          "name": "Reactivate account (registrar2)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('active', () => pm.expect(pm.response.json().data.user.status).to.eql('active'));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"status\":\"active\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/admin/users/{{registrar2_user_id}}/status", "description": "FRONTEND_API.md §3.2. Expect 200; audit action user.activated." }
+        },
+        {
+          "name": "Refusal: admin cannot deactivate self (409)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"status\":\"inactive\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/admin/users/{{admin_user_id}}/status", "description": "FRONTEND_API.md §3.2. 409 'Administrators cannot change their own status.'; audited as denied." }
+        },
+        {
+          "name": "Reset password (registrar2)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"password\":\"{{registrar2_reset_password}}\",\"current_password\":\"{{admin_password}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/admin/users/{{registrar2_user_id}}/reset-password", "description": "FRONTEND_API.md §3.2. Non-admin target only; current_password re-confirms the acting admin (rate limited separately). Expect 200; target signed out everywhere; audit action user.password_reset." }
+        },
+        {
+          "name": "Audit logs (all, newest first)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.test('entries array + pagination', () => { pm.expect(j.data.entries).to.be.an('array'); pm.expect(j.data).to.have.property('pagination'); });"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/admin/audit-logs", "description": "FRONTEND_API.md §3.2. Expect 200 {entries:[{id, at, actor_id, target_id, action, outcome, changes}], pagination}." }
+        },
+        {
+          "name": "Audit logs: user.created successes",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const e = pm.response.json().data.entries;",
+            "pm.test('4 accounts created in this run', () => pm.expect(e.length).to.be.at.least(4));",
+            "pm.test('filter applied', () => e.forEach(x => { pm.expect(x.action).to.eql('user.created'); pm.expect(x.outcome).to.eql('success'); }));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/admin/audit-logs?action=user.created&outcome=success", "description": "FRONTEND_API.md §3.2 filters action, outcome. Expect 200." }
+        },
+        {
+          "name": "Audit logs: denied",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const e = pm.response.json().data.entries;",
+            "pm.test('duplicate-email and self-status refusals logged', () => pm.expect(e.length).to.be.at.least(2));",
+            "pm.test('all denied', () => e.forEach(x => pm.expect(x.outcome).to.eql('denied')));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/admin/audit-logs?outcome=denied", "description": "FRONTEND_API.md §3.2. Denied entries carry changes {reason}. Expect 200." }
+        },
+        {
+          "name": "Audit logs: by actor",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const id = Number(pm.collectionVariables.get('admin_user_id'));",
+            "pm.test('all by this admin', () => pm.response.json().data.entries.forEach(x => pm.expect(x.actor_id).to.eql(id)));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/admin/audit-logs?actor_id={{admin_user_id}}&per_page=50", "description": "FRONTEND_API.md §3.2 filter actor_id. Expect 200." }
+        }
+      ]
+    },
+    {
+      "name": "2 Registrar — people",
+      "item": [
+        {
+          "name": "Login as registrar",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "if (pm.response.code === 200) { pm.collectionVariables.set('csrf', pm.response.json().data.csrf_token); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{registrar_email}}\",\"password\":\"{{registrar_password}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/auth/login", "description": "FRONTEND_API.md §3.1. Replaces the admin session. Expect 200; stores the rotated CSRF token." }
+        },
+        {
+          "name": "List programs",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('seeded BSCS present', () => pm.expect(pm.response.json().data.programs.map(p => p.code)).to.include('BSCS'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/programs", "description": "FRONTEND_API.md §3.3. Seeded by dev_students.php (BSCS, BSIT, BSED). Expect 200." }
+        },
+        {
+          "name": "Find seeded student profile (DEV-0001)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const s = pm.response.json().data.students.find(x => x.student_number === 'DEV-0001');",
+            "pm.test('DEV-0001 found', () => pm.expect(s).to.be.an('object'));",
+            "if (s) { pm.collectionVariables.set('student_id', s.id); }"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/students?search=DEV-0001", "description": "FRONTEND_API.md §3.3 GET /api/students (paged, search). Captures student_id of student@example.test. Expect 200." }
+        },
+        {
+          "name": "Create student profile (student2)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('student2_id', pm.response.json().data.student.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"user_id\":{{student2_user_id}},\"student_number\":\"DEMO-0002\",\"first_name\":\"Alma\",\"middle_name\":null,\"last_name\":\"Testa\",\"program_code\":\"BSCS\",\"year_level\":2,\"academic_status\":\"active\",\"admission_year\":null}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/students", "description": "FRONTEND_API.md §3.3. user_id must be an active account with the student role. DEMO-0002 matches the default development pattern (leave STUDENT_NUMBER_PATTERN unset). Expect 201." }
+        },
+        {
+          "name": "Update student profile (student2 year level)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('year_level 3', () => pm.expect(pm.response.json().data.student.year_level).to.eql(3));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"year_level\":3}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/students/{{student2_id}}", "description": "FRONTEND_API.md §3.3 PATCH. Adds an academic-history entry. Expect 200." }
+        },
+        {
+          "name": "Show student profile (student2, staff view)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('full staff shape', () => pm.expect(pm.response.json().data.student).to.have.property('user_id'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/students/{{student2_id}}", "description": "FRONTEND_API.md §3.3. Staff get the full shape. Expect 200." }
+        },
+        {
+          "name": "Create faculty profile (faculty@example.test)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('faculty_id', pm.response.json().data.faculty.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"user_id\":{{faculty_user_id}},\"employee_number\":\"EMP-D001\",\"first_name\":\"Iris\",\"last_name\":\"Docente\",\"department\":\"Department of Computing (fictional)\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/faculty", "description": "FRONTEND_API.md §3.6. There is no faculty seeder; profiles are created here. Expect 201; faculty_id is the profile id (not the account id)." }
+        },
+        {
+          "name": "Create faculty profile (faculty2)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('faculty2_id', pm.response.json().data.faculty.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"user_id\":{{faculty2_user_id}},\"employee_number\":\"EMP-D002\",\"first_name\":\"Julio\",\"last_name\":\"Profesor\",\"department\":\"Department of Computing (fictional)\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/faculty", "description": "FRONTEND_API.md §3.6. Expect 201." }
+        },
+        {
+          "name": "List faculty profiles",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('two profiles', () => pm.expect(pm.response.json().data.pagination.total).to.be.at.least(2));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/registrar/faculty", "description": "FRONTEND_API.md §3.6 (paged). Expect 200 {faculty, pagination}." }
+        },
+        {
+          "name": "Show faculty profile",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('EMP-D001', () => pm.expect(pm.response.json().data.faculty.employee_number).to.eql('EMP-D001'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/registrar/faculty/{{faculty_id}}", "description": "FRONTEND_API.md §3.6. Expect 200." }
+        },
+        {
+          "name": "Update faculty profile (faculty2 department)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"department\":\"Department of General Education (fictional)\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/faculty/{{faculty2_id}}", "description": "FRONTEND_API.md §3.6. Expect 200 'Faculty profile updated.'" }
+        }
+      ]
+    },
+    {
+      "name": "3 Registrar — scheduling",
+      "item": [
+        {
+          "name": "Create term (enrollment open)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const t = pm.response.json().data.term;",
+            "pm.test('open, not yet current', () => { pm.expect(t.enrollment_open).to.eql(true); pm.expect(t.is_current).to.eql(false); });",
+            "pm.collectionVariables.set('term_id', t.id);"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"code\":\"DEMO-2027\",\"name\":\"Demo Term 2027 (fictional)\",\"start_date\":\"2027-06-01\",\"end_date\":\"2027-10-15\",\"is_current\":false,\"enrollment_open\":true}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/terms", "description": "FRONTEND_API.md §3.4. Logged in as registrar (from folder 2). Expect 201." }
+        },
+        {
+          "name": "Set term as current",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('is_current', () => pm.expect(pm.response.json().data.term.is_current).to.eql(true));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"is_current\":true}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/terms/{{term_id}}", "description": "FRONTEND_API.md §3.4. Setting a term current clears the seeded current term. Expect 200." }
+        },
+        {
+          "name": "List terms",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const cur = pm.response.json().data.terms.filter(t => t.is_current);",
+            "pm.test('exactly one current term, the demo term', () => { pm.expect(cur.length).to.eql(1); pm.expect(cur[0].id).to.eql(Number(pm.collectionVariables.get('term_id'))); });"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/terms", "description": "FRONTEND_API.md §3.4 (not paged). Expect 200." }
+        },
+        {
+          "name": "Create section CS201-A (MON 08:00-09:30)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('section_id', pm.response.json().data.section.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"term_id\":{{term_id}},\"course_code\":\"CS201\",\"course_title\":\"Data Structures (fictional)\",\"units\":3,\"section_code\":\"A\",\"capacity\":30,\"meetings\":[{\"day\":\"MON\",\"start\":\"08:00\",\"end\":\"09:30\",\"room\":\"R-301\"}]}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/sections", "description": "FRONTEND_API.md §3.4. Main demo section. Expect 201." }
+        },
+        {
+          "name": "Create section CS202-A (capacity 1)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('section2_id', pm.response.json().data.section.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"term_id\":{{term_id}},\"course_code\":\"CS202\",\"course_title\":\"Discrete Mathematics (fictional)\",\"units\":3,\"section_code\":\"A\",\"capacity\":1,\"meetings\":[{\"day\":\"TUE\",\"start\":\"10:00\",\"end\":\"11:30\",\"room\":\"R-302\"}]}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/sections", "description": "FRONTEND_API.md §3.4. Capacity 1 for the 'section full' refusal in folder 5. Expect 201." }
+        },
+        {
+          "name": "Create section CS203-A (WED 08:00-09:30)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('section3_id', pm.response.json().data.section.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"term_id\":{{term_id}},\"course_code\":\"CS203\",\"course_title\":\"Computer Organization (fictional)\",\"units\":3,\"section_code\":\"A\",\"capacity\":30,\"meetings\":[{\"day\":\"WED\",\"start\":\"08:00\",\"end\":\"09:30\",\"room\":\"R-303\"}]}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/sections", "description": "FRONTEND_API.md §3.4. Used for the drop demo (folder 4) and the approval-time clash (folder 5). Expect 201." }
+        },
+        {
+          "name": "Create section CS204-A (MON 09:00-10:00, overlaps CS201-A)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('section4_id', pm.response.json().data.section.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"term_id\":{{term_id}},\"course_code\":\"CS204\",\"course_title\":\"Operating Systems (fictional)\",\"units\":3,\"section_code\":\"A\",\"capacity\":30,\"meetings\":[{\"day\":\"MON\",\"start\":\"09:00\",\"end\":\"10:00\",\"room\":\"R-304\"}]}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/sections", "description": "FRONTEND_API.md §3.4. Overlaps CS201-A for the student clash and the instructor clash refusals. Expect 201." }
+        },
+        {
+          "name": "List sections in the term",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('4 sections', () => pm.expect(pm.response.json().data.pagination.total).to.eql(4));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/sections?term_id={{term_id}}", "description": "FRONTEND_API.md §3.4 (paged; filters term_id, course, search). Expect 200." }
+        },
+        {
+          "name": "Show section CS201-A",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const s = pm.response.json().data.section;",
+            "pm.test('remaining = capacity', () => pm.expect(s.remaining).to.eql(30));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/sections/{{section_id}}", "description": "FRONTEND_API.md §3.4. Expect 200 {section} with approved_count, remaining, meetings, instructors." }
+        },
+        {
+          "name": "Assign instructor (faculty -> CS201-A)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.test('instructor listed', () => pm.expect(pm.response.json().data.section.instructors.map(i => i.faculty_id)).to.include(Number(pm.collectionVariables.get('faculty_id'))));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"faculty_id\":{{faculty_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/sections/{{section_id}}/instructors", "description": "FRONTEND_API.md §3.4. faculty_id is the faculty PROFILE id. Expect 201 'Instructor assigned.'" }
+        },
+        {
+          "name": "Assign instructor (faculty2 -> CS202-A)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"faculty_id\":{{faculty2_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/sections/{{section2_id}}/instructors", "description": "FRONTEND_API.md §3.4. Expect 201." }
+        },
+        {
+          "name": "Refusal: instructor teaching clash (409)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('errors.faculty_id', () => pm.expect(pm.response.json().errors).to.have.property('faculty_id'));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"faculty_id\":{{faculty_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/sections/{{section4_id}}/instructors", "description": "FRONTEND_API.md §3.4. CS204-A overlaps CS201-A, which this instructor already teaches. Expect 409 errors.faculty_id; nothing written." }
+        },
+        {
+          "name": "Assign instructor (faculty2 -> CS203-A)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"faculty_id\":{{faculty2_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/sections/{{section3_id}}/instructors", "description": "FRONTEND_API.md §3.4. Assigned only to show the unassign request next. Expect 201." }
+        },
+        {
+          "name": "Unassign instructor (faculty2 from CS203-A)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('no instructors left', () => pm.expect(pm.response.json().data.section.instructors.length).to.eql(0));"
+          ] } }],
+          "request": { "method": "DELETE", "header": [], "url": "{{base_url}}/api/registrar/sections/{{section3_id}}/instructors/{{faculty2_id}}", "description": "FRONTEND_API.md §3.4. No body fields. Expect 200 'Instructor unassigned.'" }
+        }
+      ]
+    },
+    {
+      "name": "4 Student",
+      "item": [
+        {
+          "name": "Login as student",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "if (pm.response.code === 200) { pm.collectionVariables.set('csrf', pm.response.json().data.csrf_token); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{student_email}}\",\"password\":\"{{student_password}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/auth/login", "description": "FRONTEND_API.md §3.1. Seeded student@example.test (profile DEV-0001). Expect 200." }
+        },
+        {
+          "name": "My student profile",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const s = pm.response.json().data.student;",
+            "pm.test('DEV-0001', () => pm.expect(s.student_number).to.eql('DEV-0001'));",
+            "pm.collectionVariables.set('student_id', s.id);"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/students/me", "description": "FRONTEND_API.md §3.3. Expect 200 {student}." }
+        },
+        {
+          "name": "My academic record",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('has summaries', () => { const r = pm.response.json().data.academic_record; pm.expect(r).to.have.property('enrollment_summary'); pm.expect(r).to.have.property('grades_summary'); });"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/students/me/academic-record", "description": "FRONTEND_API.md §3.3. grades_summary is {available:false} with no finalized grades; show 'unavailable', never 0. Expect 200." }
+        },
+        {
+          "name": "Browse sections in the term",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/sections?term_id={{term_id}}", "description": "FRONTEND_API.md §3.4. Any signed-in user. Expect 200." }
+        },
+        {
+          "name": "Request enrollment CS201-A",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const e = pm.response.json().data.enrollment;",
+            "pm.test('pending, no decided_by in student view', () => { pm.expect(e.status).to.eql('pending'); pm.expect(e).to.not.have.property('decided_by'); });",
+            "pm.collectionVariables.set('enrollment_id', e.id);"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"section_id\":{{section_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/enrollments", "description": "FRONTEND_API.md §3.5. section_id is the only field; the student comes from the session. Expect 201 'Enrollment requested.'" }
+        },
+        {
+          "name": "Request enrollment CS202-A",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('enrollment2_id', pm.response.json().data.enrollment.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"section_id\":{{section2_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/enrollments", "description": "FRONTEND_API.md §3.5. Expect 201." }
+        },
+        {
+          "name": "Request enrollment CS203-A",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('enrollment3_first_id', pm.response.json().data.enrollment.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"section_id\":{{section3_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/enrollments", "description": "FRONTEND_API.md §3.5. Expect 201. Dropped below to show the drop rules." }
+        },
+        {
+          "name": "Refusal: schedule clash on request (409)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('errors.section_id overlaps', () => pm.expect(pm.response.json().errors.section_id).to.include('overlaps'));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"section_id\":{{section4_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/enrollments", "description": "FRONTEND_API.md §4 Schedule clash. CS204-A overlaps the pending CS201-A request (pending and approved both count). Expect 409 errors.section_id 'This section overlaps CS201-A (section N) in your schedule.'" }
+        },
+        {
+          "name": "Refusal: duplicate request (409)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('errors.section_id', () => pm.expect(pm.response.json().errors).to.have.property('section_id'));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"section_id\":{{section_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/enrollments", "description": "FRONTEND_API.md §4 Duplicate request. Expect 409 errors.section_id 'You already have a pending or approved request for this section.'" }
+        },
+        {
+          "name": "Drop enrollment CS203-A",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('dropped', () => pm.expect(pm.response.json().data.enrollment.status).to.eql('dropped'));"
+          ] } }],
+          "request": { "method": "POST", "header": [], "url": "{{base_url}}/api/enrollments/{{enrollment3_first_id}}/drop", "description": "FRONTEND_API.md §3.5. No body fields; allowed from pending or approved while the term's enrollment_open is true. Expect 200 'Enrollment dropped.'" }
+        },
+        {
+          "name": "Refusal: drop again (409)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('errors.status', () => pm.expect(pm.response.json().errors).to.have.property('status'));"
+          ] } }],
+          "request": { "method": "POST", "header": [], "url": "{{base_url}}/api/enrollments/{{enrollment3_first_id}}/drop", "description": "FRONTEND_API.md §4 Drop rules. dropped is final. Expect 409 errors.status 'Only a pending or approved enrollment can be dropped.'" }
+        },
+        {
+          "name": "Re-request enrollment CS203-A",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('enrollment3_id', pm.response.json().data.enrollment.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"section_id\":{{section3_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/enrollments", "description": "FRONTEND_API.md §3.5. After a drop the student re-requests (new enrollment id). Expect 201." }
+        },
+        {
+          "name": "My enrollments",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('4 rows (3 pending + 1 dropped)', () => pm.expect(pm.response.json().data.pagination.total).to.eql(4));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/enrollments/me?term_id={{term_id}}", "description": "FRONTEND_API.md §3.5 (paged; filters status, term_id). Expect 200." }
+        },
+        {
+          "name": "My schedule (nothing approved yet)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const d = pm.response.json().data;",
+            "pm.test('current term, no items', () => { pm.expect(d.term_id).to.eql(Number(pm.collectionVariables.get('term_id'))); pm.expect(d.items.length).to.eql(0); });"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/schedules/me", "description": "FRONTEND_API.md §3.5. Defaults to the current term; approved enrollments only. Expect 200 {term_id, items:[]}." }
+        },
+        {
+          "name": "Login as student2",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "if (pm.response.code === 200) { pm.collectionVariables.set('csrf', pm.response.json().data.csrf_token); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{student2_email}}\",\"password\":\"{{student2_password}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/auth/login", "description": "FRONTEND_API.md §3.1. Account created in folder 1, profile in folder 2. Expect 200." }
+        },
+        {
+          "name": "student2: request enrollment CS202-A",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "if (pm.response.code === 201) { pm.collectionVariables.set('enrollment_student2_id', pm.response.json().data.enrollment.id); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"section_id\":{{section2_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/enrollments", "description": "FRONTEND_API.md §3.5. Second pending request for the capacity-1 section. Expect 201." }
+        }
+      ]
+    },
+    {
+      "name": "5 Registrar — decisions",
+      "item": [
+        {
+          "name": "Login as registrar",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "if (pm.response.code === 200) { pm.collectionVariables.set('csrf', pm.response.json().data.csrf_token); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{registrar_email}}\",\"password\":\"{{registrar_password}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/auth/login", "description": "FRONTEND_API.md §3.1. Expect 200." }
+        },
+        {
+          "name": "List pending enrollments",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const d = pm.response.json().data;",
+            "pm.test('4 pending', () => pm.expect(d.pagination.total).to.eql(4));",
+            "pm.test('staff shape has decided_by', () => pm.expect(d.enrollments[0]).to.have.property('decided_by'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/registrar/enrollments?status=pending&term_id={{term_id}}", "description": "FRONTEND_API.md §3.5 (paged; filters status, term_id, section_id, student_id). Expect 200." }
+        },
+        {
+          "name": "Approve enrollment (student, CS201-A)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const e = pm.response.json().data.enrollment;",
+            "pm.test('approved by staff', () => { pm.expect(e.status).to.eql('approved'); pm.expect(e.decided_by).to.be.a('number'); });"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"status\":\"approved\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/enrollments/{{enrollment_id}}", "description": "FRONTEND_API.md §3.5. reason optional for approval. Expect 200 'Enrollment decided.'" }
+        },
+        {
+          "name": "Refusal: decide twice (409)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('errors.status', () => pm.expect(pm.response.json().errors).to.have.property('status'));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"status\":\"approved\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/enrollments/{{enrollment_id}}", "description": "FRONTEND_API.md §3.5. Expect 409 errors.status 'Only a pending enrollment can be decided.'" }
+        },
+        {
+          "name": "Approve enrollment (student2, CS202-A)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"status\":\"approved\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/enrollments/{{enrollment_student2_id}}", "description": "FRONTEND_API.md §3.5. Fills the only seat of CS202-A. Expect 200." }
+        },
+        {
+          "name": "Refusal: section full on approval (409)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('errors.status full', () => pm.expect(pm.response.json().errors.status).to.include('full'));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"status\":\"approved\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/enrollments/{{enrollment2_id}}", "description": "FRONTEND_API.md §4 Section full. Expect 409 errors.status 'This section is full.'" }
+        },
+        {
+          "name": "Refusal: reject without reason (422)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));",
+            "pm.test('errors.reason', () => pm.expect(pm.response.json().errors.reason).to.eql('A reason is required when rejecting.'));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"status\":\"rejected\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/enrollments/{{enrollment2_id}}", "description": "FRONTEND_API.md §3.5. Expect 422 errors.reason 'A reason is required when rejecting.'" }
+        },
+        {
+          "name": "Reject enrollment with reason (student, CS202-A)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const e = pm.response.json().data.enrollment;",
+            "pm.test('rejected with reason', () => { pm.expect(e.status).to.eql('rejected'); pm.expect(e.reason).to.be.a('string'); });"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"status\":\"rejected\",\"reason\":\"Section is full (demo).\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/enrollments/{{enrollment2_id}}", "description": "FRONTEND_API.md §3.5. reason 1-255 chars, required for rejected. Expect 200." }
+        },
+        {
+          "name": "Move CS203-A meeting to MON 08:30-10:00",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"meetings\":[{\"day\":\"MON\",\"start\":\"08:30\",\"end\":\"10:00\",\"room\":\"R-303\"}]}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/sections/{{section3_id}}", "description": "FRONTEND_API.md §3.4 PATCH. Allowed: CS203-A has no approved students and no instructor (the clash check covers approved rows only). Sets up the approval-time clash. Expect 200 'Section updated.'" }
+        },
+        {
+          "name": "Refusal: schedule clash on approval (409)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('errors.status overlapping', () => pm.expect(pm.response.json().errors.status).to.include('overlapping'));"
+          ] } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"status\":\"approved\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/enrollments/{{enrollment3_id}}", "description": "FRONTEND_API.md §4 Schedule clash. The student is approved in CS201-A (MON 08:00-09:30). Expect 409 errors.status 'The student already has an approved class at an overlapping time: CS201-A (section N).'" }
+        },
+        {
+          "name": "Academic record (registrar view)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const r = pm.response.json().data.academic_record;",
+            "pm.test('enrollment summary available', () => pm.expect(r.enrollment_summary.available).to.eql(true));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/students/{{student_id}}/academic-record", "description": "FRONTEND_API.md §3.3. Expected counts after this run (unverified): pending 1, approved 1, rejected 1, dropped 1. Expect 200." }
+        }
+      ]
+    },
+    {
+      "name": "6 Faculty",
+      "item": [
+        {
+          "name": "Login as faculty",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "if (pm.response.code === 200) { pm.collectionVariables.set('csrf', pm.response.json().data.csrf_token); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{faculty_email}}\",\"password\":\"{{faculty_password}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/auth/login", "description": "FRONTEND_API.md §3.1. Expect 200." }
+        },
+        {
+          "name": "My faculty profile",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('EMP-D001', () => pm.expect(pm.response.json().data.faculty.employee_number).to.eql('EMP-D001'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/faculty/me", "description": "FRONTEND_API.md §3.6. Expect 200 {faculty}." }
+        },
+        {
+          "name": "My classes",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('CS201-A listed', () => pm.expect(pm.response.json().data.classes.map(c => c.section_id)).to.include(Number(pm.collectionVariables.get('section_id'))));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/faculty/classes?term_id={{term_id}}", "description": "FRONTEND_API.md §3.6 (not paged). Expect 200 {classes:[{section_id, term_id, course_code, section_code}]}." }
+        },
+        {
+          "name": "Class roster CS201-A",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('approved student listed', () => pm.expect(pm.response.json().data.students.map(s => s.student_id)).to.include(Number(pm.collectionVariables.get('student_id'))));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/faculty/classes/{{section_id}}/students", "description": "FRONTEND_API.md §3.6. Approved students only. Expect 200 {students, pagination}." }
+        },
+        {
+          "name": "Refusal: roster of an unassigned section (403)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/faculty/classes/{{section2_id}}/students", "description": "FRONTEND_API.md §3.6. CS202-A is taught by faculty2. Expect 403 'Access denied.'" }
+        },
+        {
+          "name": "Student profile of a rostered student (summary)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const s = pm.response.json().data.student;",
+            "pm.test('read-only summary shape', () => { pm.expect(s).to.have.property('full_name'); pm.expect(s).to.not.have.property('user_id'); pm.expect(s.sections[0].enrollment_status).to.eql('approved'); });"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/students/{{student_id}}", "description": "FRONTEND_API.md §3.3 GET /api/students/{id} (faculty). Summary {id, student_number, full_name, program_code, year_level, sections}. Expect 200." }
+        },
+        {
+          "name": "Refusal: student not on my roster (404)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', () => pm.response.to.have.status(404));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/students/{{student2_id}}", "description": "FRONTEND_API.md §3.3. student2 is approved only in CS202-A (faculty2). Expect 404, identical to a missing record." }
+        },
+        {
+          "name": "Refusal: unknown student (404)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', () => pm.response.to.have.status(404));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/students/999999", "description": "FRONTEND_API.md §3.3. Expect 404." }
+        }
+      ]
+    },
+    {
+      "name": "7 Grades",
+      "item": [
+        {
+          "name": "Faculty: class grades CS201-A",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const d = pm.response.json().data;",
+            "pm.test('no grades; roster student missing', () => { pm.expect(d.grades.length).to.eql(0); pm.expect(d.missing).to.include(Number(pm.collectionVariables.get('student_id'))); });"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/faculty/classes/{{section_id}}/grades", "description": "FRONTEND_API.md §3.7. Still signed in as faculty (folder 6). Expect 200 {grades:[], missing:[student_id]}." }
+        },
+        {
+          "name": "Faculty: submit with no grade entered (409 grades_missing)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('errors.grades_missing is an id array', () => pm.expect(pm.response.json().errors.grades_missing).to.include(Number(pm.collectionVariables.get('student_id'))));"
+          ] } }],
+          "request": { "method": "POST", "header": [], "url": "{{base_url}}/api/faculty/classes/{{section_id}}/grades/submit", "description": "FRONTEND_API.md §3.7, §4 Missing grades. No body fields. No grade row exists yet, so expect 409 errors.grades_missing = [student_id]. Needs the server started with APP_GRADE_SCALE=demo only for the later requests; this one works in either mode." }
+        },
+        {
+          "name": "Faculty: enter invalid code 3.25 (422)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));",
+            "pm.test('errors.value', () => pm.expect(pm.response.json().errors).to.have.property('value'));"
+          ] } }],
+          "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"value\":\"3.25\",\"remarks\":null}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/faculty/classes/{{section_id}}/grades/{{student_id}}", "description": "Requires the server started with APP_GRADE_SCALE=demo (collection variable grade_scale_mode = demo). 3.25 is not one of the 12 demo codes (1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 2.75, 3.00, 5.00, INC, DRP), so expect 422 errors.value. Nothing written." }
+        },
+        {
+          "name": "Faculty: enter grade 2.00 (201)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201 (needs APP_GRADE_SCALE=demo)', () => pm.response.to.have.status(201));"
+          ] } }],
+          "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"value\":\"2.00\",\"remarks\":\"Demo staff-only note\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/faculty/classes/{{section_id}}/grades/{{student_id}}", "description": "Demo-only scale, not the official university policy. Expect 201 'Grade entered.' as a draft. The remarks are staff-only and never reach the student view." }
+        },
+        {
+          "name": "Faculty: submit grades (200)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('submitted, none missing', () => { const d = pm.response.json().data; pm.expect(d.grades.map(g => g.status)).to.eql(['submitted']); pm.expect(d.missing).to.eql([]); });"
+          ] } }],
+          "request": { "method": "POST", "header": [], "url": "{{base_url}}/api/faculty/classes/{{section_id}}/grades/submit", "description": "FRONTEND_API.md §3.7. No body fields. Expect 200 'Grades submitted.'" }
+        },
+        {
+          "name": "OPTIONAL default-server demo: enter grade (409 grade_scale when grade_scale_mode=off)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const mode = pm.collectionVariables.get('grade_scale_mode');",
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "if (mode === 'off') { pm.test('errors.grade_scale (APP_GRADE_SCALE unset/off)', () => pm.expect(pm.response.json().errors.grade_scale).to.eql('Grade entry is not available yet.')); }",
+            "else { pm.test('demo mode: grade already submitted, errors.status', () => pm.expect(pm.response.json().errors).to.have.property('status')); }"
+          ] } }],
+          "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"value\":\"2.00\",\"remarks\":null}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/faculty/classes/{{section_id}}/grades/{{student_id}}", "description": "OPTIONAL and separate. To demonstrate the default behaviour, start the server WITHOUT APP_GRADE_SCALE (or =off), set the collection variable grade_scale_mode to off, and send only this request as faculty: 409 errors.grade_scale 'Grade entry is not available yet.' In demo mode (the normal run) the grade is already submitted, so the same request returns 409 errors.status and this test passes as well." }
+        },
+        {
+          "name": "Login as registrar",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "if (pm.response.code === 200) { pm.collectionVariables.set('csrf', pm.response.json().data.csrf_token); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{registrar_email}}\",\"password\":\"{{registrar_password}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/auth/login", "description": "FRONTEND_API.md §3.1. Third registrar login in this run. Expect 200." }
+        },
+        {
+          "name": "Registrar: section grades CS201-A",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const d = pm.response.json().data;",
+            "pm.test('one submitted grade, none missing', () => { pm.expect(d.grades.map(g => g.status)).to.eql(['submitted']); pm.expect(d.missing).to.eql([]); });"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/registrar/sections/{{section_id}}/grades", "description": "FRONTEND_API.md §3.7. Expect 200 staff grade view with the submitted 2.00 (requires APP_GRADE_SCALE=demo)." }
+        },
+        {
+          "name": "Registrar: finalize (200)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const g = pm.response.json().data.grades[0];",
+            "pm.test('finalized', () => pm.expect(g.status).to.eql('finalized'));",
+            "pm.collectionVariables.set('grade_id', String(g.id));",
+            "pm.collectionVariables.set('expected_seq', String(g.seq));"
+          ] } }],
+          "request": { "method": "POST", "header": [], "url": "{{base_url}}/api/registrar/sections/{{section_id}}/grades/finalize", "description": "FRONTEND_API.md §3.7. No body fields. The registrar is not the instructor, so separation of duties allows it. Expect 200 'Grades finalized.'; the test captures grade_id and the latest seq as expected_seq." }
+        },
+        {
+          "name": "Registrar: return to draft (409 nothing submitted)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('errors.status', () => pm.expect(pm.response.json().errors).to.have.property('status'));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"reason\":\"Demo: return request with nothing submitted.\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/sections/{{section_id}}/grades/return", "description": "FRONTEND_API.md §3.7. Everything is finalized now, so nothing is submitted: expect 409 errors.status 'There are no submitted grades to return.' (Return to draft with a reason works only while grades are submitted.)" }
+        },
+        {
+          "name": "Registrar: correction to 1.75 with captured expected_seq (200)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('corrected, still finalized', () => { const g = pm.response.json().data.grade; pm.expect(g.value).to.eql('1.75'); pm.expect(g.status).to.eql('finalized'); });"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"value\":\"1.75\",\"reason\":\"Demo regrade.\",\"expected_seq\":{{expected_seq}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/grades/{{grade_id}}/corrections", "description": "FRONTEND_API.md §3.7. expected_seq was captured by the finalize request. Expect 200 'Grade corrected.' (demo scale; the seq advances)." }
+        },
+        {
+          "name": "Registrar: correction with stale expected_seq (409 stale_grade)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('errors.stale_grade', () => pm.expect(pm.response.json().errors).to.have.property('stale_grade'));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"value\":\"3.00\",\"reason\":\"Demo stale correction.\",\"expected_seq\":{{expected_seq}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/grades/{{grade_id}}/corrections", "description": "Reuses the same (now stale) expected_seq. Expect 409 errors.stale_grade and nothing written. Refetch GET /api/registrar/sections/{{section_id}}/grades for the new seq." }
+        },
+        {
+          "name": "Registrar: correction with an invalid code (422)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));",
+            "pm.test('errors.value', () => pm.expect(pm.response.json().errors).to.have.property('value'));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"value\":\"inc\",\"reason\":\"Demo invalid code.\",\"expected_seq\":{{expected_seq}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/grades/{{grade_id}}/corrections", "description": "Lower-case 'inc' is not a demo code (INC is). Expect 422 errors.value. Field validation is expected to run before the staleness check; if your server answers 409 stale_grade first, note it as a finding." }
+        }
+      ]
+    },
+    {
+      "name": "8 Student grades",
+      "item": [
+        {
+          "name": "Login as student",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "if (pm.response.code === 200) { pm.collectionVariables.set('csrf', pm.response.json().data.csrf_token); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{student_email}}\",\"password\":\"{{student_password}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/auth/login", "description": "FRONTEND_API.md §3.1. Expect 200." }
+        },
+        {
+          "name": "My grades",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('one finalized corrected grade', () => { const g = pm.response.json().data.grades; pm.expect(g.length).to.eql(1); pm.expect(g[0].value).to.eql('1.75'); pm.expect(g[0].grade_status).to.eql('finalized'); pm.expect(g[0].enrollment_status).to.eql('approved'); });",
+            "pm.test('never remarks', () => { pm.expect(pm.response.text()).to.not.include('remarks'); pm.expect(pm.response.text()).to.not.include('Demo staff-only note'); });"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/grades/me", "description": "FRONTEND_API.md §3.7. Finalized grades only, never remarks; item shape {section_id, term_id, course_code, section_code, value, grade_status, enrollment_status}. With the server on APP_GRADE_SCALE=demo expect 200 with CS201-A value 1.75 (after the correction), finalized, approved. On a default (off) server this is {grades:[]}." }
+        },
+        {
+          "name": "Refusal: unknown query key (422)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));",
+            "pm.test('errors.student_id Unknown field.', () => pm.expect(pm.response.json().errors.student_id).to.eql('Unknown field.'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/grades/me?student_id={{student2_id}}", "description": "FRONTEND_API.md §3.7. Only term_id is accepted; a client-supplied student_id is refused. Expect 422." }
+        },
+        {
+          "name": "My schedule (after approval)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const items = pm.response.json().data.items;",
+            "pm.test('only CS201-A', () => { pm.expect(items.length).to.eql(1); pm.expect(items[0].section_id).to.eql(Number(pm.collectionVariables.get('section_id'))); });"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/schedules/me", "description": "FRONTEND_API.md §3.5. Approved only; CS203-A is still pending, CS202-A rejected. Expect 200." }
+        }
+      ]
+    },
+    {
+      "name": "9 Negative / authorization checks",
+      "item": [
+        {
+          "name": "Anonymous request (401)",
+          "protocolProfileBehavior": { "disableCookies": true },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));",
+            "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('Authentication required.'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/students", "description": "FRONTEND_API.md §1.3 guard order step 1. Cookies disabled for this request only, so no session is sent. Expect 401." }
+        },
+        {
+          "name": "Wrong role: student reads admin users (403)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));",
+            "pm.test('Access denied.', () => pm.expect(pm.response.json().message).to.eql('Access denied.'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/admin/users", "description": "FRONTEND_API.md §2. Signed in as student (folder 8). Expect 403; also written to the security event log (not the audit log)." }
+        },
+        {
+          "name": "Wrong role: student creates a term (403)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"code\":\"HACK-1\",\"name\":\"Not allowed\",\"start_date\":\"2027-01-01\",\"end_date\":\"2027-02-01\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/registrar/terms", "description": "FRONTEND_API.md §1.3. Role is checked before CSRF and before the body. Expect 403 'Access denied.'" }
+        },
+        {
+          "name": "Missing CSRF header (403)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "// Runs after the collection script: remove the header it added.",
+              "pm.request.headers.remove('X-CSRF-Token');"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('403', () => pm.response.to.have.status(403));",
+              "pm.test('Invalid CSRF token.', () => pm.expect(pm.response.json().message).to.eql('Invalid CSRF token.'));"
+            ] } }
+          ],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"section_id\":{{section4_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/enrollments", "description": "FRONTEND_API.md §1.3. Allowed role, no X-CSRF-Token. Expect 403 'Invalid CSRF token.'; nothing written." }
+        },
+        {
+          "name": "Unknown body field (422)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));",
+            "pm.test('errors.student_id Unknown field.', () => pm.expect(pm.response.json().errors.student_id).to.eql('Unknown field.'));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"section_id\":{{section4_id}},\"student_id\":{{student2_id}}}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/enrollments", "description": "FRONTEND_API.md §1.1 allowlists, §3.5. The student always comes from the session. Expect 422." }
+        },
+        {
+          "name": "Login as admin",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "if (pm.response.code === 200) { pm.collectionVariables.set('csrf', pm.response.json().data.csrf_token); }"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"{{admin_email}}\",\"password\":\"{{admin_password}}\"}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/auth/login", "description": "FRONTEND_API.md §3.1. Second admin login in this run. Expect 200." }
+        },
+        {
+          "name": "Audit logs: unknown query key (422)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));",
+            "pm.test('errors.search Unknown field.', () => pm.expect(pm.response.json().errors.search).to.eql('Unknown field.'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/admin/audit-logs?search=user", "description": "FRONTEND_API.md §3.2. Any key other than page, per_page, action, outcome, actor_id, target_id, from, to (including search) gives 422." }
+        },
+        {
+          "name": "Audit logs: invalid outcome (422)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));",
+            "pm.test('errors.outcome', () => pm.expect(pm.response.json().errors.outcome).to.eql('Use success or denied.'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/admin/audit-logs?outcome=maybe", "description": "FRONTEND_API.md §3.2. Expect 422 errors.outcome." }
+        },
+        {
+          "name": "Audit logs: final review",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const actions = pm.response.json().data.entries.map(e => e.action);",
+            "pm.test('admin actions recorded', () => pm.expect(actions).to.include.members(['user.created', 'user.updated', 'user.deactivated', 'user.activated', 'user.password_reset']));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/admin/audit-logs?per_page=50", "description": "FRONTEND_API.md §3.2. Shows every admin action of folder 1, newest first. Registrar, faculty and student actions are not in this log. Expect 200." }
+        }
+      ]
+    },
+    {
+      "name": "10 Logout",
+      "item": [
+        {
+          "name": "Logout",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('Signed out', () => pm.expect(pm.response.json().message).to.eql('Signed out successfully.'));",
+            "pm.collectionVariables.set('csrf', ''); // the session and its token are destroyed"
+          ] } }],
+          "request": { "method": "POST", "header": [], "url": "{{base_url}}/api/auth/logout", "description": "FRONTEND_API.md §3.1. Signed in + CSRF. Expect 200 {}." }
+        },
+        {
+          "name": "Who am I after logout (401)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/auth/me", "description": "FRONTEND_API.md §3.1. Expect 401." }
+        },
+        {
+          "name": "Get CSRF token (fresh session)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('csrf', pm.response.json().data.csrf_token);"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{base_url}}/api/auth/csrf", "description": "FRONTEND_API.md §1.3. Needed before any new login. Expect 200." }
+        }
+      ]
+    }
+  ]
+}

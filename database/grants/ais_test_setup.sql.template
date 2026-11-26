@@ -1,0 +1,214 @@
+-- ais_test account creation and server hardening TEMPLATE.
+-- STATUS: UNVERIFIED - never executed.
+--
+-- PURPOSE   Harden the trusted MariaDB 10.11 instance (127.0.0.1:3307) and create the two
+--           accounts the isolated ais_test environment needs (docs/database/SECURITY.md
+--           sections 1, 6, 8; docs/database/INSTALL.md section 2).
+-- SCOPE     ais_test ONLY. No production database, no production accounts, no cutover
+--           (owner decision DB-14, 2026-11-26). Accounts ais_app, ais_migrator and
+--           ais_backup are deliberately NOT created here.
+--
+-- PLACEHOLDERS (fill in a COPY; never edit or commit passwords into this template)
+--   {{ROOT_PASSWORD}}    new password for root@localhost
+--   {{TESTER_PASSWORD}}  password for ais_tester@127.0.0.1
+--   {{APP_PASSWORD}}     password for ais_test_app@127.0.0.1
+--   {{HOSTNAME}}         this machine's host name, as shown by the pre-check below
+--   Generate each password randomly on THIS machine (long, no quote or backslash
+--   characters), different per account, never copied from another host. Keep them in the
+--   owner's password manager. The filled copy lives OUTSIDE the repo (and outside
+--   OneDrive) and is deleted after the run.
+--
+-- HOW TO RUN (owner, as root; the client stops at the first error; do NOT use --force)
+--   mariadb -h 127.0.0.1 -P 3307 -u root -p < filled-copy.sql
+--   (the first run on a fresh install-db instance: root has no password, press Enter)
+--
+-- NOT IDEMPOTENT BY DESIGN: CREATE USER has no IF NOT EXISTS, so the script fails if an
+-- account already exists and nothing is silently reused. ALTER USER on a missing root
+-- account also fails: run section 0 first, uncomment only the lock lines (section 1) for
+-- root hosts it lists that are not CURRENT_USER(), then run the filled copy.
+--
+-- NOTHING IS DROPPED. Locking root accounts is reversible (ALTER USER ... ACCOUNT UNLOCK).
+-- Dropping the root@127.0.0.1 / root@::1 / root@<hostname> accounts, anonymous accounts
+-- or the `test` database would be destructive and needs separate owner approval.
+
+-- ---------------------------------------------------------------------------
+-- 0. Pre-check (read-only). Use it to find the exact {{HOSTNAME}} and which root
+--    accounts exist. Run it first, on its own, if unsure.
+--
+--    CONNECTION CHECK (do this first): run it over the SAME connection method you will use
+--    to run the filled copy, and the later app_grants.sql and database.sql steps too.
+--    Recommended: a named pipe / shared memory connection on Windows MariaDB 10.11
+--    (e.g. `mariadb --protocol=PIPE -u root -p`), which normally gives root@localhost;
+--    confirm on the trusted machine which method works. TCP to 127.0.0.1 may give
+--    root@127.0.0.1 instead.
+--    Read the result of SELECT CURRENT_USER() below:
+--      root@localhost  : uncomment the lock lines (section 1) for the other root hosts this
+--                        section lists.
+--      root@127.0.0.1 (or another host) : do NOT lock that account (it would lock you out of
+--                        your own connection). Add ALTER USER 'root'@'<that host>'
+--                        IDENTIFIED BY '{{ROOT_PASSWORD}}'; instead, and uncomment the lock
+--                        lines only for the other listed root hosts.
+--    In every case the lock lines ship commented (fail-safe); never uncomment the line for
+--    CURRENT_USER() or for a host this section did not list.
+-- ---------------------------------------------------------------------------
+SELECT CURRENT_USER();
+
+SELECT User, Host,
+       JSON_VALUE(Priv, '$.plugin')                AS plugin,
+       JSON_VALUE(Priv, '$.authentication_string') <> '' AS has_password,
+       JSON_VALUE(Priv, '$.account_locked')        AS locked
+FROM mysql.global_priv
+ORDER BY User, Host;
+
+-- ---------------------------------------------------------------------------
+-- 1. Hardening
+-- ---------------------------------------------------------------------------
+-- Root is used only by the owner for account creation and recovery (SECURITY.md 1).
+ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ROOT_PASSWORD}}';
+
+-- Lock the passwordless root accounts that mariadb-install-db creates.
+-- FAIL-SAFE: the three lock lines are commented out on purpose, so running this file as-is can
+-- never lock the account you are logged in as. In your filled copy, uncomment ONLY the lines whose
+-- account is NOT what section 0's CURRENT_USER() returned, and only for hosts section 0 listed.
+-- If CURRENT_USER() was root@127.0.0.1, leave that line commented and give it {{ROOT_PASSWORD}}
+-- instead (see section 0).
+-- ALTER USER 'root'@'127.0.0.1' ACCOUNT LOCK;
+-- ALTER USER 'root'@'::1'       ACCOUNT LOCK;
+-- ALTER USER 'root'@'{{HOSTNAME}}' ACCOUNT LOCK;
+
+-- Verification: every root row except root@localhost must show locked = true (the JSON
+-- boolean, not 1), and no unlocked account may show has_password = 0.
+SELECT User, Host,
+       JSON_VALUE(Priv, '$.plugin')                AS plugin,
+       JSON_VALUE(Priv, '$.authentication_string') <> '' AS has_password,
+       JSON_VALUE(Priv, '$.account_locked')        AS locked
+FROM mysql.global_priv
+ORDER BY User, Host;
+
+-- PUBLIC is the MariaDB 10.4+ role that EVERY account inherits. It cannot log in, but it can hold
+-- privileges: mariadb-install-db 10.11 grants it SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER,
+-- CREATE ROUTINE, EVENT, TRIGGER (and more) on `test`.* and `test\_%`.* (observed 2026-11-26), so the
+-- app account could create `test_*` databases and routines. Check 5g must show ZERO rows before the run.
+-- Revoking removes no data and is reversible (rollback: re-apply the two GRANT lines that
+-- SHOW GRANTS FOR PUBLIC printed beforehand, recorded in the evidence). It is a server-wide change
+-- outside ais_test: OWNER APPROVAL REQUIRED, then uncomment both lines in the filled copy.
+-- REVOKE ALL PRIVILEGES ON `test`.*   FROM PUBLIC;
+-- REVOKE ALL PRIVILEGES ON `test\_%`.* FROM PUBLIC;
+
+-- Anonymous accounts (User = '') and the `test` database, if present, are NOT touched
+-- here. Removing them is destructive: report them to the owner for an approved step.
+-- (For the owner, after approval only:  DROP USER ''@'localhost';  DROP DATABASE test; )
+
+-- ---------------------------------------------------------------------------
+-- 2. Accounts. Host 127.0.0.1 ONLY: the app and the tools accept only DB_HOST=127.0.0.1
+--    (TCP), so every connection matches these accounts. No @'localhost', @'::1' or @'%'
+--    account is created, so nothing can connect by another route.
+-- ---------------------------------------------------------------------------
+CREATE USER 'ais_tester'@'127.0.0.1'   IDENTIFIED BY '{{TESTER_PASSWORD}}';
+CREATE USER 'ais_test_app'@'127.0.0.1' IDENTIFIED BY '{{APP_PASSWORD}}';
+
+-- ---------------------------------------------------------------------------
+-- 3. OPTIONAL BLOCK - the ais_test database. Choose by schema method (INSTALL.md 2.3):
+--    Method A (migrations, php database/migrate.php up --target=ais_test):
+--        the database must exist first -> UNCOMMENT the line below.
+--    Method B (database/database.sql, run as root):
+--        that file creates ais_test and fails with error 1007 if it exists
+--        -> LEAVE THE LINE COMMENTED. The GRANT in section 4 works before the database exists.
+-- ---------------------------------------------------------------------------
+-- CREATE DATABASE ais_test CHARACTER SET utf8mb4 COLLATE utf8mb4_nopad_bin;
+
+-- ---------------------------------------------------------------------------
+-- 4. Grants. No GRANT OPTION, no global privileges.
+-- ---------------------------------------------------------------------------
+GRANT ALL PRIVILEGES ON ais_test.* TO 'ais_tester'@'127.0.0.1';
+
+-- ais_test_app gets NOTHING here. Its per-table grants come from
+-- database/grants/app_grants.sql ({{SCHEMA}}=ais_test, {{APP_USER}}=ais_test_app):
+-- 19 statements / 46 rows, applied as root AFTER migrations V0001-V0010 (or database.sql)
+-- have created the tables. Until then it holds USAGE only.
+
+FLUSH PRIVILEGES;
+
+-- ---------------------------------------------------------------------------
+-- 5. Post-checks (read-only). Expected results are in the comments.
+-- ---------------------------------------------------------------------------
+-- 5a. Exactly these two new accounts; both with has_password = 1.
+SELECT User, Host,
+       JSON_VALUE(Priv, '$.plugin')                AS plugin,
+       JSON_VALUE(Priv, '$.authentication_string') <> '' AS has_password,
+       JSON_VALUE(Priv, '$.account_locked')        AS locked
+FROM mysql.global_priv
+WHERE User IN ('ais_tester', 'ais_test_app');
+
+-- 5b. Any LOGIN account with an empty or missing password that is not locked: expect ZERO rows.
+--     Roles (is_role = 'Y', e.g. PUBLIC) cannot authenticate, so they are excluded here by their role flag,
+--     never by name; what a role can DO is checked in 5g.
+--     Always one row: rows_5b must be 0 (an explicit 0 cannot be confused with a query that never ran).
+SELECT COUNT(*) AS rows_5b, GROUP_CONCAT(CONCAT(t.User, '@', t.Host)) AS detail FROM (
+SELECT gp.User, gp.Host
+FROM mysql.global_priv gp
+WHERE COALESCE(JSON_VALUE(gp.Priv, '$.authentication_string'), '') = ''
+  AND COALESCE(JSON_VALUE(gp.Priv, '$.account_locked'), 'false') NOT IN ('1', 'true')
+  AND COALESCE(JSON_VALUE(gp.Priv, '$.plugin'), 'mysql_native_password') IN ('mysql_native_password', 'mysql_old_password')
+  AND NOT EXISTS (SELECT 1 FROM mysql.user u WHERE u.User = gp.User AND u.Host = gp.Host AND u.is_role = 'Y')
+) t;
+
+-- 5c. Grants. Expect: tester = USAGE globally + ALL PRIVILEGES ON ais_test.*;
+--     app = USAGE only now (after app_grants.sql: USAGE + 19 table-level GRANT lines).
+SHOW GRANTS FOR 'ais_tester'@'127.0.0.1';
+SHOW GRANTS FOR 'ais_test_app'@'127.0.0.1';
+
+-- 5d. After app_grants.sql: expect 46 rows for the app account, all on ais_test,
+--     and none with IS_GRANTABLE = 'YES'. (Before it: 0 rows.)
+SELECT COUNT(*) AS app_table_privilege_rows
+FROM information_schema.table_privileges
+WHERE GRANTEE = '''ais_test_app''@''127.0.0.1''' AND TABLE_SCHEMA = 'ais_test';
+SELECT GRANTEE, TABLE_SCHEMA, TABLE_NAME, PRIVILEGE_TYPE, IS_GRANTABLE
+FROM information_schema.table_privileges
+WHERE GRANTEE IN ('''ais_tester''@''127.0.0.1''', '''ais_test_app''@''127.0.0.1''')
+  AND IS_GRANTABLE = 'YES';                       -- expect ZERO rows
+
+-- 5e. No schema-level or global privilege for the app account beyond USAGE: expect ZERO rows.
+SELECT GRANTEE, TABLE_SCHEMA FROM information_schema.schema_privileges
+WHERE GRANTEE = '''ais_test_app''@''127.0.0.1''';
+SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.user_privileges
+WHERE GRANTEE IN ('''ais_tester''@''127.0.0.1''', '''ais_test_app''@''127.0.0.1''')
+  AND PRIVILEGE_TYPE <> 'USAGE';                  -- expect ZERO rows
+
+-- 5f. Server settings: local_infile = 0, bind_address = 127.0.0.1 (port 3307).
+SELECT @@GLOBAL.local_infile AS local_infile, @@GLOBAL.bind_address AS bind_address,
+       @@GLOBAL.port AS port, @@GLOBAL.sql_mode AS sql_mode;
+
+-- 5g. Privileges EVERY account inherits (PUBLIC role) or that anonymous users hold: expect ZERO rows.
+--     A non-login role can still grant privileges to everyone, so it is checked, not assumed harmless.
+--     Always one row: rows_5g must be 0.
+SELECT COUNT(*) AS rows_5g, GROUP_CONCAT(CONCAT(t.source, ':', t.User, '@', t.Host, ':', t.object)) AS detail FROM (
+SELECT 'db' AS source, User, Host, Db AS object FROM mysql.db WHERE User IN ('', 'PUBLIC')
+UNION ALL SELECT 'table', User, Host, CONCAT(Db, '.', Table_name) FROM mysql.tables_priv WHERE User IN ('', 'PUBLIC')
+UNION ALL SELECT 'column', User, Host, CONCAT(Db, '.', Table_name, '.', Column_name) FROM mysql.columns_priv WHERE User IN ('', 'PUBLIC')
+UNION ALL SELECT 'routine', User, Host, CONCAT(Db, '.', Routine_name) FROM mysql.procs_priv WHERE User IN ('', 'PUBLIC')
+UNION ALL SELECT 'global', User, Host, JSON_VALUE(Priv, '$.access') FROM mysql.global_priv
+  WHERE User IN ('', 'PUBLIC') AND COALESCE(JSON_VALUE(Priv, '$.access'), '0') <> '0'
+-- PROXY grants. install-db's default rows root@<host> -> ''@'' (WITH GRANT) are excluded by exact match only,
+-- pinned to the four hosts install-db creates (a later root@'%' proxy row still shows);
+-- with no anonymous account (step 7a) they proxy to nobody.
+UNION ALL SELECT 'proxy', User, Host, CONCAT(Proxied_user, '@', Proxied_host) FROM mysql.proxies_priv
+  WHERE (User IN ('', 'PUBLIC') OR Proxied_user = '')
+    AND NOT (User = 'root' AND Host IN ('localhost', '127.0.0.1', '::1', '{{HOSTNAME}}')
+             AND Proxied_user = '' AND Proxied_host = '')
+-- Roles granted to everyone, to anonymous users, or to the two test accounts.
+UNION ALL SELECT 'role', User, Host, Role FROM mysql.roles_mapping
+  WHERE User IN ('', 'PUBLIC', 'ais_tester', 'ais_test_app')
+) t;
+
+-- 5h. Unlocked LOGIN accounts on any plugin but mysql_native_password / ed25519, or with an auth_or
+--     alternative (e.g. passwordless named_pipe / unix_socket): expect ZERO rows; report any row to the owner.
+--     Always one row: rows_5h must be 0.
+SELECT COUNT(*) AS rows_5h, GROUP_CONCAT(CONCAT(t.User, '@', t.Host, ':', COALESCE(t.plugin, '?'), IF(t.has_auth_or, '+auth_or', ''))) AS detail FROM (
+SELECT User, Host, JSON_VALUE(Priv, '$.plugin') AS plugin, JSON_EXISTS(Priv, '$.auth_or') AS has_auth_or
+FROM mysql.global_priv
+WHERE COALESCE(JSON_VALUE(Priv, '$.is_role'), 'false') NOT IN ('1', 'true')
+  AND COALESCE(JSON_VALUE(Priv, '$.account_locked'), 'false') NOT IN ('1', 'true')
+  AND (COALESCE(JSON_VALUE(Priv, '$.plugin'), 'mysql_native_password') NOT IN ('mysql_native_password', 'ed25519')
+       OR JSON_EXISTS(Priv, '$.auth_or') = 1)
+) t;
